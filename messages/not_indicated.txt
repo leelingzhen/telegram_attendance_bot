@@ -1,0 +1,3 @@
+Hey you there! YES YOU THERE 🫵🏻 it seems you have not indicated your attendance 🧐 for {date}.
+Update your attendance using /attendance!
+Otherwise if you do not have access to commands, you may let <a href="tg://user?id=161579060">Owen</a> know if you are coming!"
