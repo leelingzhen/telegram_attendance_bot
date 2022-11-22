@@ -1,9 +1,6 @@
 .open attendance.db
 
-.separator ,
-.import player_profiles.csv players
-DELETE FROM players WHERE telegram_id == "";
-CREATE TABLE new_players (
+CREATE TABLE players (
     id LONGINT, 
     name TEXT, 
     telegram_user TEXT,
@@ -13,19 +10,8 @@ CREATE TABLE new_players (
     PRIMARY KEY(id)
 );
 
-INSERT INTO new_players (id, name, telegram_user, gender, notification) SELECT telegram_id, names, telegram_user, gender, status FROM players;
 
-DROP TABLE players;
-ALTER TABLE new_players RENAME TO players;
 
-CREATE TABLE IF NOT EXISTS players(
-    id LONGINT,
-    name TEXT, 
-    gender TEXT, 
-    notification INT, 
-    language_pack INT, 
-    PRIMARY KEY(id)
-);
 CREATE TABLE events(
     id LONGINT, 
     event_type TEXT, 
@@ -46,7 +32,6 @@ CREATE TABLE attendance(
     FOREIGN KEY(player_id) REFERENCES players(id)
 );
 
-.import access_control.csv old_access_control
 
 CREATE TABLE access_control(
     player_id LONGINT,
@@ -55,10 +40,7 @@ CREATE TABLE access_control(
     FOREIGN KEY (control_id) references access_control_description(id)
 );
 
-INSERT INTO access_control(player_id, control_id)
-SELECT player_id, control_id FROM old_access_control;
 
-DROP TABLE old_access_control;
 
 CREATE TABLE access_control_description(
     id INT,
@@ -92,4 +74,4 @@ CREATE TABLE announcement_entities(
     entity_length INT,
     FOREIGN KEY(event_id) REFERENCES events(id)
 );
-.separator |
+

@@ -1,4 +1,4 @@
 {
     "development": 1,
-    "database":"attendance.db"
+    "database":"resources/attendance.db"
 }

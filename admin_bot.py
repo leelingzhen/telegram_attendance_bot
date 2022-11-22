@@ -63,6 +63,12 @@ def secure(access=2):
                         chat_id=user.id,
                         text='you do not have access to this bot, please contact adminstrators'
                         )
+            elif user_clearance < access:
+                print("WARNING: Unauthroized access to function denied for @{}".format(user.username))
+                context.bot.send_message(
+                        chat_id=user.id,
+                        text='you do not have access to this function.'
+                        )
                 return  # quit function
             return func(update, context, *args, **kwargs)
         return wrapped
@@ -146,12 +152,12 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
 
-        with open(os.path.join('saved_sql_queries', 'available_attendance.sql')) as f:
+        with open(os.path.join('resources','saved_sql_queries', 'available_attendance.sql')) as f:
             sql_query = f.read()
             player_data = db.execute(sql_query,(event_id, )).fetchall()
             player_data = helpers.sql_to_dict(player_data)
 
-        with open(os.path.join('saved_sql_queries', 'unindicated_players.sql')) as f:
+        with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
             sql_query = f.read()
             unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
 
@@ -314,11 +320,11 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
         admin_msg.edit_text(
             "getting players...\n"
             )
-        with open(os.path.join('saved_sql_queries', 'attending.sql')) as f:
+        with open(os.path.join('resources', 'saved_sql_queries', 'attending.sql')) as f:
             sql_query = f.read()
             db.row_factory = sqlite3.Row
             send_list = db.execute(sql_query,(event_id, )).fetchall()
-        with open (os.path.join('saved_sql_queries', 'unindicated_players.sql')) as f:
+        with open (os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
             sql_query = f.read()
             send_list += db.execute(sql_query, (event_id,)).fetchall()
 
@@ -361,7 +367,9 @@ def send_message(update:Update, context:CallbackContext) -> None:
     admin_msg = query.edit_message_text(text=admin_msg_text)
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
-        active_players = db.execute('SELECT id, telegram_user FROM players WHERE notification = 1 ORDER BY gender DESC, name').fetchall()
+        with open(os.path.join('resources', 'saved_sql_queries', 'club_members.sql')) as f:
+            sql = f.read()
+        active_players = db.execute(sql).fetchall()
 
 
     admin_msg_text +="done.\nSending announcements... 0/{len(active_players)}"
@@ -398,7 +406,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
     #getting unindicated data
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
-        with open(os.path.join("saved_sql_queries", 'unindicated_players.sql')) as f:
+        with open(os.path.join('resources', "saved_sql_queries", 'unindicated_players.sql')) as f:
             sql_query = f.read()
             unindicated_data = db.execute(sql_query, (event_id, )).fetchall()
             event_type = db.execute('SELECT event_type FROM events WHERE id = ?', (event_id, )).fetchone()
@@ -409,7 +417,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
             text="Parsing gsheets... done.\nCrafting reminder message...\n"
             )
     attached_str = event_date.strftime('%d-%b-%y, %A') + ' (' + event_type["event_type"] + ')'
-    remind_msg = helpers.read_msg_from_file(os.path.join('messages', 'not_indicated.txt'), attached_str)
+    remind_msg = helpers.read_msg_from_file(os.path.join("resources", 'messages', 'not_indicated.txt'), attached_str)
 
     query.edit_message_text(
             text=f"Parsing gsheets... done.\nCrafting reminder message... done.\nSending messages... 0/{len(unindicated_data)}\n"

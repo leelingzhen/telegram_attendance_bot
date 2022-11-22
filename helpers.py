@@ -98,7 +98,6 @@ def sql_to_dict(arr:list) -> dict:
         elif row['status'] == 0 and row['control_id'] >=4:
             text = row['name'] + ' (' + row['reason'] + ')'
             output['absent'].append(text)
-    print(guest["boys"])
     output['attending_boys'] += guest['boys']
     output['attending_girls'] += guest['girls']
     return output

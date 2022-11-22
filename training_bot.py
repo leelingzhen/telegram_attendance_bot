@@ -95,6 +95,7 @@ def start(update: Update, context: CallbackContext)-> None:
         elif player_access > 0:
             language_pack = player_profile[3]
             update.message.reply_text("Hello please use the commands to talk to me!")
+        logger.info('user %s has talked to the bot', user.first_name)
     return None
 
 @secure(access=2)
@@ -335,7 +336,8 @@ Attendance: {status}\n\n"""
                 )
 
         announcement = db.execute('SELECT announcement FROM events WHERE id = ?', (event_id, )).fetchone()['announcement']
-        print(announcement is None)
+        access_control = db.execute('SELECT control_id FROM access_control WHERE player_id = ?', (user.id, )).fetchone()['control_id']
+
         if context.user_data["prev_status"] == 0 and announcement is not None:
 
             entity_data = db.execute('SELECT * FROM announcement_entities WHERE event_id = ?', (event_id, )).fetchall()
@@ -353,6 +355,24 @@ Attendance: {status}\n\n"""
                     text=announcement,
                     entities=announcement_entities,
                     )
+
+        elif context.user_data['prev_status'] == 'Not Indicated' and access_control < 4 and announcement is not None:
+            entity_data = db.execute('SELECT * FROM announcement_entities WHERE event_id = ?', (event_id, )).fetchall()
+            announcement_entities = []
+            for entity in entity_data:
+                announcement_entities.append(
+                        MessageEntity(
+                            type=entity['entity_type'],
+                            offset=entity['offset'],
+                            length=entity['entity_length']
+                            )
+                        )
+            context.bot.send_message(
+                    chat_id=user.id,
+                    text=announcement,
+                    entities=announcement_entities,
+                    )
+
     
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
@@ -767,9 +787,11 @@ def select_gender(update:Update, context:CallbackContext) -> int:
         return ConversationHandler.END
     
     logger.info("user %s is registering", user.first_name)
+    with open(os.path.join('resources', 'messages', 'registration_introduction.txt')) as f:
+        text = f.read()
     buttons=[
-            [InlineKeyboardButton(text='👦🏻', callback_data='Male')],
-            [InlineKeyboardButton(text='👩🏻', callback_data='Female')]
+            [InlineKeyboardButton(text='Male 👦🏻', callback_data='Male')],
+            [InlineKeyboardButton(text='Female 👩🏻', callback_data='Female')]
             ]
     update.message.reply_text(
             text = """
@@ -836,9 +858,12 @@ Full name : {name}
 telegram handle : {telegram_user}
 Gender : {gender}
 
+Please do notify either <a href="tg://user?id=161579060">Owen</a>, <a href="tg://user?id=39135211">Mandy</a> or your contact in Alliance that you have already registered too!
+
     """
     bot_message.edit_text(
-            text=text
+            text=text,
+            parse_mode='html'
             )
     return ConversationHandler.END
 
@@ -866,7 +891,7 @@ def review_membership(update:Update, context:CallbackContext) -> int:
             return ConversationHandler.END
 
 
-    with open(os.path.join('messages', 'membership_registration_terms.txt')) as f:
+    with open(os.path.join("resources", 'messages', 'membership_registration_terms.txt')) as f:
         text = f.read()
     buttons = [
             [InlineKeyboardButton(text="I wanna be part of Alliance😊", callback_data="forward")],
@@ -921,8 +946,8 @@ def main():
             BotCommand("kaypoh", "your friend never go u dw go is it??"),
             BotCommand("attendance_plus", "one shot update attendance"),
             BotCommand("events", "events that you are attending"),
-            BotCommand("register", "use this command if you're a new player"),
             BotCommand("settings", "access settings and refresh username if recently changed"),
+            BotCommand("register", "use this command if you're a new player"),
             BotCommand("apply_membership", "use this command if you'll like to be part of Alliance!"),
             BotCommand("cancel", "cancel any process"),
             ]
