@@ -8,7 +8,7 @@ services:
         container_name: alliance_admin_bot
         volumes:
             - .secrets:/alliance_bot/.secrets
-            - resources:/alliance_bot/resources
+            - ./resources:/alliance_bot/resources
     training_bot:
         build:
             context: .
@@ -17,4 +17,4 @@ services:
         container_name: alliance_training_bot
         volumes:
             - .secrets:/alliance_bot/.secrets
-            - resources:/alliance_bot/resources
+            - ./resources:/alliance_bot/resources

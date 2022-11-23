@@ -66,6 +66,7 @@ def secure(access=2):
 
 @send_typing_action
 def start(update: Update, context: CallbackContext)-> None:
+    user = update.effective_user
     
     if update.message is not None:
         chat_id = update.message.chat.id
@@ -106,7 +107,8 @@ def choosing_date_low_access(update:Update, context:CallbackContext) -> int:
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
         player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()[0]
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (date.today().strftime('%Y%m%d%H%M'),player_access)).fetchall()
+        event_id = date.today().strftime('%Y%m%d%H%M')
+        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, player_access)).fetchall()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
@@ -131,7 +133,8 @@ def choosing_date_high_access(update:Update, context:CallbackContext) -> int:
     with sqlite3.connect(CONFIG['database']) as db:
         player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()[0]
         db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (date.today().strftime('%Y%m%d%H%M'), player_access)).fetchall()
+        event_id = date.today().strftime('%Y%m%d%H%M')
+        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, player_access)).fetchall()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
