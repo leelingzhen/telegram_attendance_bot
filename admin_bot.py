@@ -48,6 +48,7 @@ def send_typing_action(func):
 
     return command_func
 
+
 def secure(access=2):
     def decorator(func):
     #admin restrictions
@@ -59,20 +60,20 @@ def secure(access=2):
                 user_clearance = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()
             if user_clearance < 5:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
-                context.bot.send_message(
-                        chat_id=user.id,
+                update.message.reply_text(
                         text='you do not have access to this bot, please contact adminstrators'
                         )
+                return
             elif user_clearance < access:
-                print("WARNING: Unauthroized access to function denied for @{}".format(user.username))
-                context.bot.send_message(
-                        chat_id=user.id,
-                        text='you do not have access to this function.'
+                print("WARNING: Unauthorized access denied for @{}.".format(user.username))
+                update.message.reply_text(
+                        text='you do not have access to this function, please contact adminstrators'
                         )
                 return  # quit function
             return func(update, context, *args, **kwargs)
         return wrapped
     return decorator
+
 
 @secure(access=5)
 @send_typing_action
@@ -609,7 +610,12 @@ def event_menu(update:Update, context:CallbackContext)-> int:
         query.answer()
         bot_message = query.edit_message_text('parsing new changes...')
         data_update = query.data.split(',')
-        context.user_data['event_data'][data_update[0]] = data_update[1]
+        if data_update[0] == 'access_control':
+            context.user_data['event_data'][data_update[0]] = int(data_update[1])
+        else:
+            context.user_data['event_data'][data_update[0]] = data_update[1]
+            
+
         
     else:
 
@@ -673,7 +679,7 @@ Note:
 It is <u><b>not recommended</b></u> to change the starting date and time of an event. Only do so after a consensus on a schedule changed has been reached.
 
 <i>Otherwise, affected players attending the event will not know of the schedule change but their attendance will still reflect as per previous schedule</i>
-\n\nEg. original datetime: {event_date.strftime('%d-%m-%Y@%H%M')}""",
+\n\nEg. original datetime: <code>{event_date.strftime('%d-%m-%Y@%H%M')}</code>""",
             parse_mode='html'
                     )
 
@@ -774,19 +780,20 @@ def commit_event_changes(update:Update, context:CallbackContext) -> str:
 
     with sqlite3.connect(CONFIG['database']) as db:
         #first check if there are duplicated events
-        res = db.execute('SELECT * FROM events WHERE id = ?', (event_id, )).fetchall()
-        if len(res) > 0:
-            buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
-            context.user_data['form'] = 'rejected'
-            query.edit_message_text(
-                    text="There already exists an event at this time and date. please edit starting datetime",
-                    reply_markup=InlineKeyboardMarkup(buttons)
-                    )
-            return "event_menu"
+        existing_events = db.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchall()
         event_data = context.user_data['event_data']
 
         db.execute("BEGIN TRANSACTION")
         if context.user_data['event_creation']:
+            if len(existing_events) > 0:
+                buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
+                context.user_data['form'] = 'rejected'
+                query.edit_message_text(
+                        text="There already exists an event at this time and date. please edit starting datetime",
+                        reply_markup=InlineKeyboardMarkup(buttons)
+                        )
+                return "event_menu"
+
             query.edit_message_text('creating new event...')
             data = [
                             event_data['id'], 
@@ -800,6 +807,16 @@ def commit_event_changes(update:Update, context:CallbackContext) -> str:
                             ]
             db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)", data)
         else:
+
+            if original_id != event_id and len(existing_events) > 0:
+                buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
+                context.user_data['form'] = 'rejected'
+                query.edit_message_text(
+                        text="There already exists an event at this time and date. please edit starting datetime",
+                        reply_markup=InlineKeyboardMarkup(buttons)
+                        )
+                return "event_menu"
+
             query.edit_message_text('updating event...')
             data = [
                     event_data['id'],

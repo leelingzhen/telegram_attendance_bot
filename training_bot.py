@@ -52,13 +52,15 @@ def secure(access=2):
     #admin restrictions
         @wraps(func)
         def wrapped(update, context, *args, **kwargs):
+            user = update.effective_user
             with sqlite3.connect(CONFIG["database"]) as db:
                 db.row_factory = lambda cursor, row:row[0]
-                accessible_id_list = db.execute("SELECT player_id FROM access_control WHERE control_id >= ?", (access,)).fetchall()
-            user = update.effective_user
-            if user.id not in accessible_id_list:
+                user_clearance = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()
+            if user_clearance < access:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
-                update.message.reply_text('you do not have access to this function, please contact adminstrators')
+                update.message.reply_text(
+                        text='you do not have access to this function, please contact adminstrators'
+                        )
                 return  # quit function
             return func(update, context, *args, **kwargs)
         return wrapped
@@ -256,7 +258,7 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     context.user_data["reason"] = ""
 
     button = [
-            [InlineKeyboardButton("Yes I ❤️ frisbee", callback_data="Yas")],
+            [InlineKeyboardButton("Yes I ❤️ Alliance", callback_data="Yas")],
             [InlineKeyboardButton("Yes but...", callback_data="Yes")],
             [InlineKeyboardButton("No (lame)", callback_data="No")],
             ]
@@ -561,7 +563,7 @@ You have sucessfully updated your attendance for {len(chosen_events)} records!
 
     
 
-@secure(access=4)
+@secure(access=2)
 @send_typing_action
 def events(update: Update, context: CallbackContext)-> None:
     user = update.effective_user
@@ -575,14 +577,18 @@ def events(update: Update, context: CallbackContext)-> None:
             update.message.reply_text("There are no future trainings planned Enjoy your break.😴😴")
             logger.info("user %s has sucessfully queried for events and there are no further events planned", user.first_name)
             return None
+        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()['control_id']
 
         registered_events = db.execute("""
         SELECT id, event_type FROM events
         JOIN attendance ON events.id = attendance.event_id
-        WHERE attendance.player_id = ? AND attendance.event_id >= ? AND attendance.status = ?
+        WHERE attendance.player_id = ? 
+        AND attendance.event_id >= ? 
+        AND attendance.status = ?
+        AND events.access_control <= ?
         ORDER BY id
                 """, 
-                (user.id, date.today().strftime("%Y%m%d%H%M"), 1)
+                (user.id, date.today().strftime("%Y%m%d%H%M"), 1, player_access)
                 ).fetchall()
 
         #sorting by categories
@@ -605,12 +611,13 @@ def events(update: Update, context: CallbackContext)-> None:
             if dict_date[key] == list():
                 continue
             else:
-                text += f"<u>{key}</u>\n\n"
+                text += f"<u>{key}</u>\n"
                 for element in dict_date[key]:
                     text += element + "\n"
+                text += '\n'
 
         
-    update.message.reply_text(f"You'll 👀 Alliance on:\n\n{text}\n\nSee you then!🦿🦿", parse_mode='html')
+    update.message.reply_text(f"You'll 👀 Alliance on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
@@ -933,9 +940,11 @@ Your commitment has been noted and is under the review of the core team 🥹
 
 @send_typing_action
 def cancel(update:Update, context: CallbackContext) -> int:
+    user = update.effective_user
     update.message.reply_text(
             text="process cancelled, see you next time!"
             )
+    logger.info('user %s just cancelled a process', user.first_name)
     return ConversationHandler.END
 
 def main():
