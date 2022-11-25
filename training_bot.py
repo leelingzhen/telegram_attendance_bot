@@ -6,6 +6,7 @@ import sqlite3
 
 from datetime import date, datetime
 from functools import wraps
+from ics import Calendar, Event
 
 from telegram import (
         Update,
@@ -643,6 +644,60 @@ def events(update: Update, context: CallbackContext)-> None:
 
     return None
 
+@send_typing_action
+def generate_ics(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    event_id = int(query.data)
+
+    user = update.effective_user
+    with sqlite3.connect(CONFIG['database']) as db:
+        db.row_factory = sqlite3.Row
+        event_data = db.execute("SELECT * FROM events WHERE id = ? ", (event_id, )).fetchone()
+        event_date = datetime.strptime(str(event_id), "%Y%m%d%H%M")
+
+        #text formatting
+        training_date = event_date.strftime("%-d %b, %a")
+        start_time= event_date.strftime("%-I:%M%p")
+        end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
+
+        #calendar formatting
+        calendar_start= event_date.strftime("%Y-%m-%d %H:M%S")
+        calendar_end = event_date.strftime("%Y-%m-%d") + event_data["end_time"] + ":00"
+        calendar = Calendar()
+        calendar_event = Event(
+                name=f"Alliance {event_data['event_type']}",
+                begin=event_date.strftime("%Y-%m-%d %H:%M:%S"),
+                end=event_date.strftime("%Y-%m-%d") + " " + event_data["end_time"] + ":00",
+                location = event_data['location']
+                )
+        calendar.events.add(calendar_event)
+    text = f"""
+<u>Details</u>
+Date: {event_date.strftime('%-d %b, %a')}
+Event: {event_data['event_type']}
+Time: {start_time} - {end_time}
+Location : {event_data['location']}
+"""
+    query.edit_message_text(
+            text=f"Save the event to your calendar with the generated ics file!\n{text}",
+            parse_mode='html'
+            )
+
+
+    with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
+        f.writelines(calendar.serialize_iter())
+    with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'rb') as f:
+        context.bot.send_document(user.id, f)
+    os.remove(f"{event_date.strftime('%-d %b, %a')}.ics")
+
+    logger.info("user %s has generated an ics file for %s", user.first_name, event_date.strftime("%d-%m-%y"))
+
+    return ConversationHandler.END
+
+
+   
+
 @secure(access=4)
 @send_typing_action
 def settings_start(update: Update, context: CallbackContext)-> int:
@@ -983,6 +1038,7 @@ def main():
             BotCommand("kaypoh", "your friend never go u dw go is it??"),
             BotCommand("attendance_plus", "one shot update attendance"),
             BotCommand("events", "events that you are attending"),
+            BotCommand("event_details", "generate ics file for personal calendars"),
             BotCommand("settings", "access settings and refresh username if recently changed"),
             BotCommand("register", "use this command if you're a new player"),
             BotCommand("apply_membership", "use this command if you'll like to be part of Alliance!"),
@@ -1039,6 +1095,17 @@ def main():
                 },
             fallbacks=[CommandHandler("cancel", cancel)],
             )
+    
+    conv_handler_save_event = ConversationHandler(
+            entry_points=[CommandHandler("event_details", choosing_date_low_access)],
+            states={
+                1 : [
+                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
+                    CallbackQueryHandler(generate_ics, pattern='^(\d{10}|\d{12})$')
+                    ],
+                },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            )
 
     conv_handler_settings = ConversationHandler(
             entry_points=[CommandHandler("settings",settings_start)],
@@ -1091,6 +1158,7 @@ def main():
     dispatcher.add_handler(conv_handler_mass_attendance)
     dispatcher.add_handler(CommandHandler("events", events))
     dispatcher.add_handler(conv_handler_register)
+    dispatcher.add_handler(conv_handler_save_event)
     dispatcher.add_handler(conv_handler_settings)
     dispatcher.add_handler(conv_handler_apply_members)
     dispatcher.add_handler(CommandHandler("cancel", cancel))
