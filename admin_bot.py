@@ -174,7 +174,7 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
         absent += player + "\n"
     unindicated = ''
     for row in unindicated_data:
-        unindicated += row['name'] + '\n'
+        unindicated += row['name'] + " - @" + row['telegram_user'] + '\n'
 
 
     text = f"""
@@ -516,7 +516,7 @@ def first_event_menu(update:Update, context:CallbackContext)-> int:
     event_data = context.user_data['event_data']
 
     buttons =[
-                #[InlineKeyboardButton(text="Event datetime", callback_data='start')],
+                [InlineKeyboardButton(text="Event datetime", callback_data='start')],
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
                 [InlineKeyboardButton(text='Location', callback_data='location')],
@@ -589,7 +589,7 @@ def event_menu(update:Update, context:CallbackContext)-> int:
     prev_form = context.user_data['form'] # data is 'query' or 'datetime' or 'time'
     text = ''
     buttons =[
-                #[InlineKeyboardButton(text="Event datetime", callback_data='start')],
+                [InlineKeyboardButton(text="Event datetime", callback_data='start')],
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
                 [InlineKeyboardButton(text='Location', callback_data='location')],
@@ -621,7 +621,7 @@ def event_menu(update:Update, context:CallbackContext)-> int:
             except ValueError:
                 text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
             else:
-                context.user_data['event_data']['event_id'] = int(event_date.strftime("%Y%m%d%H%M"))
+                context.user_data['event_data']['id'] = int(event_date.strftime("%Y%m%d%H%M"))
                 context.user_data['event_data']['event_date'] = event_date.strftime("%Y-%m-%d")
                 context.user_data['event_data']['start_time'] = event_date.strftime("%H:%M")
 
@@ -661,10 +661,20 @@ access : {event_data['access_control']}
 
 def change_datetime(update:Update, context:CallbackContext) -> str:
     context.user_data['form'] = 'datetime'
+    event_id = context.user_data['event_data']['id']
+    event_date = datetime.strptime(str(event_id),'%Y%m%d%H%M')
     query = update.callback_query
     query.answer()
     query.edit_message_text(
-                    text=f"Text me the starting datetime of the event in the format dd-mm-yyyy@HHMM\n\nEg. {datetime.now().strftime('%d-%m-%Y@%H%M')}"
+            text=f"""
+Text me the starting datetime of the event in the format dd-mm-yyyy@HHMM
+
+Note:
+It is <u><b>not recommended</b></u> to change the starting date and time of an event. Only do so after a consensus on a schedule changed has been reached.
+
+<i>Otherwise, affected players attending the event will not know of the schedule change but their attendance will still reflect as per previous schedule</i>
+\n\nEg. original datetime: {event_date.strftime('%d-%m-%Y@%H%M')}""",
+            parse_mode='html'
                     )
 
     return "event_menu"
@@ -759,12 +769,12 @@ def commit_event_changes(update:Update, context:CallbackContext) -> str:
     query.answer()
     user = update.effective_user
 
-    #first check if there are duplicated events
     event_id = context.user_data['event_data']['id']
     original_id = context.user_data['original_id']
 
     with sqlite3.connect(CONFIG['database']) as db:
-        res = db.execute('SELECT * FROM events WHERE id = ? AND id != ?', (event_id, original_id)).fetchall()
+        #first check if there are duplicated events
+        res = db.execute('SELECT * FROM events WHERE id = ?', (event_id, )).fetchall()
         if len(res) > 0:
             buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
             context.user_data['form'] = 'rejected'
@@ -792,16 +802,22 @@ def commit_event_changes(update:Update, context:CallbackContext) -> str:
         else:
             query.edit_message_text('updating event...')
             data = [
+                    event_data['id'],
                     event_data['event_type'],
+                    event_data['event_date'],
+                    event_data['start_time'],
                     event_data['end_time'],
                     event_data['location'],
                     event_data['access_control'],
                     original_id
                     ]
-            db.execute("UPDATE events SET event_type = ?, end_time = ?, location = ?, access_control = ? WHERE id = ?", data)
+            db.execute("UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, access_control = ? WHERE id = ?", data)
+
+            #update id change on attendance
+            db.execute("UPDATE attendance SET event_id = ? WHERE event_id = ?", (event_data['id'], original_id))
         db.commit()
     query.edit_message_text(
-            text="event sucessfully added/updated!"
+            text="event sucessfully added/updated! Announce new event or changes by /announce_event!"
             )
     logger.info("user %s has successfully updated an event", user.first_name)
         
@@ -1117,7 +1133,7 @@ def main():
                     MessageHandler(Filters.text & ~Filters.command ,first_event_menu)
                     ],
                 3:[
-                    #CallbackQueryHandler(change_datetime, pattern="^start$"),
+                    CallbackQueryHandler(change_datetime, pattern="^start$"),
                     CallbackQueryHandler(change_time, pattern='^end_time$'),
                     CallbackQueryHandler(edit_type, pattern='^type$'),
                     CallbackQueryHandler(edit_location, pattern='^location$'),

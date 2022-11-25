@@ -178,43 +178,47 @@ def attendance_list(update:Update, context:CallbackContext) -> int:
     event_id = int(query.data)
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
     with sqlite3.connect(CONFIG['database']) as db:
-        attending_boys = db.execute("""
-                SELECT name FROM players
-                JOIN attendance ON players.id = attendance.player_id
-                WHERE attendance.event_id = ? AND players.gender = 'Male'
-                AND attendance.status = 1
-                ORDER BY name
-                """,
-                (event_id, )
-                ).fetchall()
-        attending_boys = list(sum(attending_boys, ()))
-        attending_boys_str = helpers.list_to_string(attending_boys)
-        
-
-        attending_girls = db.execute("""
-                SELECT name FROM players
-                JOIN attendance ON players.id = attendance.player_id
-                WHERE attendance.event_id = ? AND players.gender = 'Female'
-                AND attendance.status = 1
-                ORDER BY name
-                """,
-                (event_id, )
-                ).fetchall()
-        attending_girls = list(sum(attending_girls, ()))
-        attending_girls_str = helpers.list_to_string(attending_girls)
-
         db.row_factory = sqlite3.Row
+
+        with open(os.path.join('resources','saved_sql_queries', 'available_attendance.sql')) as f:
+            sql_query = f.read()
+            player_data = db.execute(sql_query,(event_id, )).fetchall()
+            player_data = helpers.sql_to_dict(player_data)
+
+        with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
+            sql_query = f.read()
+            unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
+
         event = db.execute("SELECT * FROM events WHERE id = ?", (event_id, )).fetchone()
+
+    attending_boys = ""
+    for player in player_data['attending_boys']:
+        attending_boys += player + "\n"
+    attending_girls = ''
+    for player in player_data['attending_girls']:
+        attending_girls += player + "\n"
+    absent = ''
+    for player in player_data['absent']:
+        absent += player + "\n"
+    unindicated = ''
+    for row in unindicated_data:
+        unindicated += row['name'] + '\n'
+
+
 
     newline = '\n'
     text = f"""
-Attendance for <b>{event['event_type']}</b> on <u>{event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')}</u> : {len(attending_boys) + len(attending_girls)}
+Attendance for <b>{event['event_type']}</b> on <u>{event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')}</u> : {len(player_data['attending_boys']) + len(player_data['attending_girls'])}
 
-Attending 👦🏻: {len(attending_boys)}
-{attending_boys_str}
+Attending 👦🏻: {len(player_data['attending_boys'])}
+{attending_boys}
+Attending 👩🏻: {len(player_data['attending_girls'])}
+{attending_girls}
+Absent: {len(player_data['absent'])}
+{absent}
 
-Attending 👩🏻: {len(attending_girls)}
-{attending_girls_str}
+Uninidicated: {len(unindicated_data)}
+{unindicated}
 
     """
     query.edit_message_text(text=text, parse_mode='html')
