@@ -241,7 +241,13 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     with sqlite3.connect(CONFIG["database"]) as db:
         db.row_factory = sqlite3.Row
         attendance = db.execute("SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?", (selected_event, user_id)).fetchone()
-        event_type = db.execute("SELECT event_type FROM events WHERE id = ?", (selected_event, )).fetchone()["event_type"]
+        event_data = db.execute("SELECT * FROM events WHERE id = ?", (selected_event, )).fetchone()
+        event_date = datetime.strptime(str(selected_event), "%Y%m%d%H%M")
+        training_date = event_date.strftime("%-d %b, %a")
+        start_time= event_date.strftime("%-I:%M%p")
+        end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
+
+
 
     if attendance is None:
 
@@ -254,6 +260,7 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
         prev_reason = attendance["reason"]
 
     #store attendance into context
+    context.user_data['event_data'] = event_data
     context.user_data["status"] = ""
     context.user_data["reason"] = ""
 
@@ -265,9 +272,20 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     reply_markup = InlineKeyboardMarkup(button)
 
     query.edit_message_text(
-            text=f"Your attendance is indicated as \'{prev_status}{'' if prev_reason =='' else f' ({prev_reason})'}\'\n"
-            f"Would you like to go for {event_type}?",
-            reply_markup=reply_markup
+            text=f"""
+Your attendance is indicated as \'{prev_status}{'' if prev_reason =='' else f' ({prev_reason})'}\'
+
+<u>Details</u>
+Date: {event_date.strftime('%-d %b, %a')}
+Event: {event_data['event_type']}
+Time: {start_time} - {end_time}
+Location : {event_data['location']}
+
+Would you like to go for {event_data['event_type']}?
+            """
+            ,
+            reply_markup=reply_markup,
+            parse_mode='html'
             )
     return 2
 
@@ -306,10 +324,10 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
     #get stored data
     user = update.effective_user
     event_id = context.user_data["event_id"]
+    event_data = context.user_data['event_data']
+
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT event_type, event_date, start_time, end_time FROM events WHERE id = ?", (event_id, )).fetchone()
-    
         start_datetime = datetime.strptime(str(event_id), "%Y%m%d%H%M")
         
         training_date = start_datetime.strftime("%-d %b, %a")
@@ -332,16 +350,19 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
 
         text = f"""
 You have sucessfully updated your attendance! 🤖🤖\n
-Date: {training_date}\n
-Event: {event_data['event_type']}\n
-Time: {training_time} - {end_time}\n
+<u>Details</u>
+Date: {training_date}
+Event: {event_data['event_type']}
+Time: {training_time} - {end_time}
+Location : {event_data['location']}
 Attendance: {status}\n\n""" 
 
         if reason != "":
             text += f"Comments: {reason}\n\n" 
 
         bot_message.edit_text(
-                text=text + bot_comment
+                text=text + bot_comment,
+                parse_mode='html'
                 )
 
         announcement = db.execute('SELECT announcement FROM events WHERE id = ?', (event_id, )).fetchone()['announcement']
