@@ -34,7 +34,7 @@ CREATE TABLE events(
     end_time TIME DEFAULT '00:00', 
     location TEXT,
     announcement TEXT, 
-    access_control DEFAULT 2,
+    access_control INT DEFAULT 2,
     PRIMARY KEY(id)
 );
 CREATE TABLE attendance(

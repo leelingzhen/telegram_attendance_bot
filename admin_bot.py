@@ -337,7 +337,8 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
     send_message_generator = helpers.mass_send(
             msg=msg,
             send_list=send_list,
-            entities=msg_entities
+            entities=msg_entities,
+            development=CONFIG['development']
             )
 
     unsent_names = ''
@@ -426,7 +427,8 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
     send_message_generator = helpers.mass_send(
             msg=remind_msg,
             send_list=unindicated_data,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            development=CONFIG['development']
             )
     unsent_names = ''
     for i, _ in enumerate(unindicated_data):
