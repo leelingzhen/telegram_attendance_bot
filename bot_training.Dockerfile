@@ -1,5 +1,5 @@
 FROM python:3.8.8-slim-buster
-WORKDIR /alliance_bot
+WORKDIR /attendance_bot
 
 ENV VENV=/opt/venv
 RUN python3 -m venv $VENV

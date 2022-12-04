@@ -654,7 +654,7 @@ def events(update: Update, context: CallbackContext)-> None:
                 text += '\n'
 
         
-    update.message.reply_text(f"You'll 👀 {CONFIG['team_name']}on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
+    update.message.reply_text(f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
@@ -899,12 +899,7 @@ def select_gender(update:Update, context:CallbackContext) -> int:
             [InlineKeyboardButton(text='Female 👩🏻', callback_data='Female')]
             ]
     update.message.reply_text(
-            text = """
-We will be collecting your <u>full name</u> and <u>gender</u> for the registration process.
-After that a core member from Alliance will approve your registration and you will be able to join us for trainings!
-
-Are you a...
-            """,
+            text=text,
             parse_mode="html",
             reply_markup=InlineKeyboardMarkup(buttons)
             )
