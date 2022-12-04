@@ -938,12 +938,12 @@ def choose_access_level_again(update:Update, context:CallbackContext) -> int:
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
         user_access = db.execute('SELECT control_id FROM access_control WHERE player_id = ? ', (user.id, )).fetchone()['control_id']
-        if user_access == 7:
-            access_data = db.execute('SELECT * FROM access_control_description ORDER BY id', (user_access, )).fetchall()
+        if user_access == 100:
+            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
         else:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= ? ORDER BY id', (user_access, )).fetchall()
+            access_data = db.execute('SELECT * FROM access_control_description WHERE id < 100 ORDER BY id').fetchall()
 
-    if user_access < 7:
+    if user_access != 100:
         access_data = access_data[1:]
 
     buttons = list()
