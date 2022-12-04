@@ -119,7 +119,7 @@ def choosing_date(update:Update, context:CallbackContext) -> int:
     reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
     # if there are no queried trainings
     if event_data == list():
-        update.message.reply_text("There are no more further planned events. Please add a new one using!/add_event")
+        update.message.reply_text("There are no more further planned events. Please add a new one using!/event_administration")
         return ConversationHandler.END 
 
     update.message.reply_text( 
@@ -206,7 +206,7 @@ def announce_all(update:Update, context: CallbackContext) -> int:
     context.user_data['conv_state'] = conv_state
 
     update.message.reply_text(
-            'You will be sending an annoucement to all active players in alliance through @alliance_training_bot. '
+            f'You will be sending an annoucement to all active players in {CONFIG["team_name"]} through {CONFIG["training_bot_name"]}. '
             'Send /cancel to cancel the process\n\n'
             'Please send me your message here!'
             )
@@ -329,6 +329,13 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
             sql_query = f.read()
             send_list += db.execute(sql_query, (event_id,)).fetchall()
 
+        #adding team managers 
+        send_list += db.execute('SELECT * FROM players JOIN access_control ON players.id = access_control.player_id WHERE access_control.control_id = 7').fetchall()
+
+        #adding hidden_sends
+        hidden_send_list = db.execute('SELECT * FROM players WHERE hidden = 1').fetchall()
+
+
 
     admin_msg.edit_text(
             "getting players... done.\n"
@@ -348,9 +355,19 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
             unsent_names += ' @' + unsent_name +","
         admin_msg.edit_text(f"Sending event announcements... {i+1}/{len(send_list)}")
 
+    send_message_generator = helpers.mass_send(
+            msg=msg,
+            send_list=hidden_send_list,
+            entities=msg_entities,
+            development=CONFIG['development']
+            )
+
+    for row in hidden_send_list:
+         next(send_message_generator)
+
 
     admin_msg.edit_text(
-            "Sending event announcements complete. list of uncompleted sends: \n\n" + unsent_names,
+            "Sending event announcements complete. list of uncompleted sends: \n\n" #+ unsent_names,
             )
 
     logger.info("User %s sucessfully sent event messages", user.first_name)
@@ -372,6 +389,7 @@ def send_message(update:Update, context:CallbackContext) -> None:
         with open(os.path.join('resources', 'saved_sql_queries', 'club_members.sql')) as f:
             sql = f.read()
         active_players = db.execute(sql).fetchall()
+        hidden_players = db.execute('SELECT * FROM players WHERE hidden = 1').fetchall()
 
 
     admin_msg_text +="done.\nSending announcements... 0/{len(active_players)}"
@@ -388,8 +406,17 @@ def send_message(update:Update, context:CallbackContext) -> None:
             failed_send_list += "@" + failed_send_user + ', '
         admin_msg.edit_text(f"Sending announcements... {i+1}/{len(active_players)}")
 
+    send_message_generator = helpers.mass_send(
+            msg=msg,
+            send_list=hidden_players,
+            entities=msg_entities,
+            development=CONFIG['development']
+            )
+    for row in hidden_players:
+        next(send_message_generator)
+
     admin_msg.edit_text(
-            "Sending announcements complete. list of uncompleted sends: \n\n" + failed_send_list,
+            "Sending announcements complete. list of uncompleted sends: \n\n" #+ failed_send_list,
             )
 
     logger.info("User %s sucessfully sent announcements", user.first_name)
@@ -467,9 +494,6 @@ def choosing_date_administration(update:Update, context:CallbackContext) -> int:
 
     reply_markup = InlineKeyboardMarkup(buttons)
     # if there are no queried trainings
-    if event_data == list():
-        update.message.reply_text("There are no more further planned events. Please add a new one using!/event_adminstration")
-        return ConversationHandler.END 
 
     update.message.reply_text( 
             text="Choose event:",
@@ -851,12 +875,12 @@ def choose_access_level(update:Update, context:CallbackContext) -> int:
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
         user_access = db.execute('SELECT control_id FROM access_control WHERE player_id = ? ', (user.id, )).fetchone()['control_id']
-        if user_access == 7:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= ? ORDER BY id', (user_access, )).fetchall()
+        if user_access == 100:
+            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
         else:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id < ? ORDER BY id', (user_access, )).fetchall()
+            access_data = db.execute('SELECT * FROM access_control_description WHERE id < 100 ORDER BY id').fetchall()
 
-    if user_access < 7:
+    if user_access != 100:
         access_data = access_data[1:]
 
     buttons = list()
@@ -866,8 +890,41 @@ def choose_access_level(update:Update, context:CallbackContext) -> int:
 
     reply_markup = InlineKeyboardMarkup(buttons)
     update.message.reply_text(
-            text='Pick level of access control:',
-            reply_markup=reply_markup
+            text='''
+<u>Guests:</u>
+Access to updating attendance
+Will <b>only</b> receive event announcements to events they have indicated that they are attending
+
+No access to /kaypoh, and club announcements from /announce_all
+
+
+<u>Members: </u>
+Acess to all functions in the training bot
+No access to admin bot
+
+
+<u>Core:</u>
+Access to all functions in training bot
+Acesss to /event_administration in admin bot
+
+No access to /access_control_administration
+
+<i>Similar to the function of Excos in an organisation</i>
+
+
+<u>Admin:</u>
+Full level of access
+
+
+<u>Team Manager:</u>
+Full level of access, same as admin.
+But will not accounted for in attendance
+
+
+Pick position:
+            ''',
+            reply_markup=reply_markup,
+            parse_mode='html'
             )
     
     return 1
@@ -882,9 +939,9 @@ def choose_access_level_again(update:Update, context:CallbackContext) -> int:
         db.row_factory = sqlite3.Row
         user_access = db.execute('SELECT control_id FROM access_control WHERE player_id = ? ', (user.id, )).fetchone()['control_id']
         if user_access == 7:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= ? ORDER BY id', (user_access, )).fetchall()
+            access_data = db.execute('SELECT * FROM access_control_description ORDER BY id', (user_access, )).fetchall()
         else:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id < ? ORDER BY id', (user_access, )).fetchall()
+            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= ? ORDER BY id', (user_access, )).fetchall()
 
     if user_access < 7:
         access_data = access_data[1:]
@@ -896,8 +953,41 @@ def choose_access_level_again(update:Update, context:CallbackContext) -> int:
 
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(
-            text='Pick position:',
-            reply_markup=reply_markup
+            text='''
+<u>Guests:</u>
+Access to updating attendance
+Will <b>only</b> receive event announcements to events they have indicated that they are attending
+
+No access to /kaypoh, and club announcements from /announce_all
+
+
+<u>Members: </u>
+Acess to all functions in the training bot
+No access to admin bot
+
+
+<u>Core:</u>
+Access to all functions in training bot
+Acesss to /event_administration in admin bot
+
+No access to /access_control_administration
+
+<i>Similar to the function of Excos in an organisation</i>
+
+
+<u>Admin:</u>
+Full level of access
+
+
+<u>Team Manager:</u>
+Full level of access, same as admin.
+But will not accounted for in attendance
+
+
+Pick position:
+            ''',
+            reply_markup=reply_markup,
+            parse_mode='html'
             )
     
     return 1
@@ -933,8 +1023,42 @@ def choose_players(update:Update, context:CallbackContext) -> int:
     reply_markup=InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
-            text="Choose player",
-            reply_markup=reply_markup
+            text=
+            '''
+<u>Guests:</u>
+Access to updating attendance
+Will <b>only</b> receive event announcements to events they have indicated that they are attending
+
+No access to /kaypoh, and club announcements from /announce_all
+
+
+<u>Members: </u>
+Acess to all functions in the training bot
+No access to admin bot
+
+
+<u>Core:</u>
+Access to all functions in training bot
+Acesss to /event_administration in admin bot
+
+No access to /access_control_administration
+
+<i>Similar to the function of Excos in an organisation</i>
+
+
+<u>Admin:</u>
+Full level of access
+
+
+<u>Team Manager:</u>
+Full level of access, same as admin.
+But will not accounted for in attendance
+
+
+Pick position:
+            ''',
+            reply_markup=reply_markup,
+            parse_mode='html'
             )
 
     return 2
@@ -951,8 +1075,11 @@ def change_player_access(update:Update, context:CallbackContext) -> int:
     context.user_data['selected_player_id'] = selected_player_id
     selected_access = context.user_data['selected_access']
     buttons = [
-            [InlineKeyboardButton(text="Upgrade", callback_data='1')],
-            [InlineKeyboardButton(text="Downgrade", callback_data='-1')],
+            [InlineKeyboardButton(text="Guest", callback_data='2')],
+            [InlineKeyboardButton(text="Member", callback_data='4')],
+            [InlineKeyboardButton(text="Core", callback_data='5')],
+            [InlineKeyboardButton(text='Admin', callback_data='6')],
+            [InlineKeyboardButton(text='Team Manager', callback_data='7')],
             [InlineKeyboardButton(text="Kick", callback_data="0")],
             ]
     with sqlite3.connect(CONFIG['database']) as db:
@@ -962,26 +1089,20 @@ def change_player_access(update:Update, context:CallbackContext) -> int:
                 WHERE id = ?
                 """,
                 (selected_player_id, )).fetchone()
+        position = db.execute("SELECT * FROM access_control_description WHERE id = ?", (selected_access, )).fetchone()
 
-        position = db.execute("SELECT description FROM access_control_description WHERE id = ?", (selected_access, )).fetchone()['description']
         context.user_data['player_data'] = player_data
         context.user_data['position'] = position
 
-
-    buttons = [
-        [InlineKeyboardButton(text="Upgrade", callback_data='1')],
-        [InlineKeyboardButton(text="Downgrade", callback_data='-1')],
-        [InlineKeyboardButton(text="Kick", callback_data="0")],
-        ]
 
     reply_markup = InlineKeyboardMarkup(buttons)
     text = f"""
 Player : {player_data['name']}
 handle : @{player_data['telegram_user']}
 gender : {player_data['gender']}
-position : {position}
+position : {position['description']}
 
-What would you like to do?
+What is the new position for this player?
 
     """
     query.edit_message_text(
@@ -996,21 +1117,18 @@ What would you like to do?
 def review_access_change(update:Updater, context:CallbackContext) -> int:
     query = update.callback_query
     query.answer()
-    move = int(query.data)
 
     selected_player_id = context.user_data['selected_player_id']
     selected_access = context.user_data['selected_access']
     player_data = context.user_data['player_data']
     position = context.user_data['position']
 
-    if move == 0:
-        new_selected_access = move
-    else:
-        new_selected_access = selected_access + move
+    new_selected_access = int(query.data)
     context.user_data['new_selected_access'] = new_selected_access
 
     with sqlite3.connect(CONFIG['database']) as db:
-        new_position = db.execute('SELECT description FROM access_control_description WHERE id = ?', (new_selected_access,)).fetchone()[0]
+        db.row_factory = sqlite3.Row
+        new_position = db.execute('SELECT * FROM access_control_description WHERE id = ?', (new_selected_access,)).fetchone()
         context.user_data['new_position'] = new_position
 
     buttons = [
@@ -1021,8 +1139,8 @@ def review_access_change(update:Updater, context:CallbackContext) -> int:
 Player : {player_data['name']}
 handle : @{player_data['telegram_user']}
 gender : {player_data['gender']}
-position : {position}
-new position : {new_position}
+position : {position['description']}
+new position : {new_position['description']}
 
 Confirm new position for {player_data['name']}?
     """
@@ -1041,8 +1159,8 @@ def commit_access_change(update:Updater, context:CallbackContext) -> int:
     selected_player_id = context.user_data['selected_player_id']
     selected_access = context.user_data['selected_access']
     new_selected_access = context.user_data['new_selected_access']
-    old_pos = context.user_data['position']
-    new_pos = context.user_data['new_position']
+    old_pos = context.user_data['position']['description']
+    new_pos = context.user_data['new_position']['description']
     with sqlite3.connect(CONFIG['database']) as db:
         player_name = db.execute('SELECT name FROM players WHERE id = ?', (selected_player_id, )).fetchone()[0]
         db.execute('BEGIN TRANSACTION')

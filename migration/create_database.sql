@@ -10,6 +10,7 @@ CREATE TABLE new_players (
     gender TEXT, 
     notification INT DEFAULT 1, 
     language_pack TEXT NOT NULL DEFAULT "default",
+    hidden INT DEFAULT 0,
     PRIMARY KEY(id)
 );
 
@@ -73,7 +74,8 @@ INSERT INTO access_control_description VALUES (3, 'Pending Membership approval')
 INSERT INTO access_control_description VALUES (4, 'Member');
 INSERT INTO access_control_description VALUES (5, 'Core');
 INSERT INTO access_control_description VALUES (6, 'Admin');
-INSERT INTO access_control_description VALUES (7, 'Super User');
+INSERT INTO access_control_description VALUES (7, 'Team Manager');
+INSERT INTO access_control_description VALUES (100, 'Super User');
 
 CREATE TABLE gym_exercises(
     id INT,

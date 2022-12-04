@@ -23,6 +23,8 @@ from telegram.ext import (
         CallbackQueryHandler,
         )
 
+with open("config.json") as f:
+    CONFIG = json.load(f)
 
 def date_buttons( data:sqlite3.Row, page_num=0, pages=True) -> list:
     buttons = list()
@@ -110,17 +112,17 @@ def get_tokens(filename=os.path.join('.secrets', 'bot_credentials.json')) -> dic
 def mass_send(msg: str, send_list: sqlite3.Row, parse_mode=None, entities=None, development=True) -> str:
     #getting tokens
     bot_tokens = get_tokens()
-    alliance_bot = Bot(token=bot_tokens['alliance_bot'])
+    training_bot = Bot(token=bot_tokens['training_bot'])
 
     #getting checking dev
     if development:
         bot_messenger = Bot(token=bot_tokens['dev_bot'])
     else:
-        bot_messenger = Bot(token=bot_tokens['alliance_bot'])
+        bot_messenger = Bot(token=bot_tokens['training_bot'])
 
     for row in send_list:
         try:
-            bot_messenger.send_message(
+            message_object = bot_messenger.send_message(
                     chat_id=row['id'],
                     text=msg,
                     parse_mode=parse_mode,
@@ -129,9 +131,30 @@ def mass_send(msg: str, send_list: sqlite3.Row, parse_mode=None, entities=None, 
         except (Unauthorized, BadRequest):
             yield row['telegram_user']
         else:
+            bot_messenger.pin_chat_message(
+                    chat_id=row['id'],
+                    message_id=message_object.message_id,
+                    disable_notification=True
+                    )
             yield ""
 
 def read_msg_from_file(filename, date_str: str) -> str:
     with open(filename, "r", encoding="utf-8") as text_f:
         msg = text_f.read().replace("{date}", date_str).rstrip()
     return msg
+
+def refresh_player_profiles(update: Update, context: CallbackContext):
+    user = update.effective_user
+
+    with sqlite3.connect(CONFIG['database']) as db:
+        db.row_factory = sqlite3.Row
+        player_profile = db.execute("SELECT * FROM players WHERE id = ?", (user.id,)).fetchone()
+        saved_username = player_profile["telegram_user"]
+
+    if user.username != saved_username:
+        db.execute("BEGIN TRANSACTION")
+        db.execute("UPDATE players SET telegram_user = ? WHERE id = ?", (user.username, user.id))
+        db.commit()
+
+    return None
+

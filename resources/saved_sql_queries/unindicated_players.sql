@@ -9,4 +9,8 @@ WHERE name NOT IN
 )
 AND notification == 1
 AND access_control.control_id >= 4
-
+AND access_control.control_id != 7
+AND players.hidden = 0
+ORDER BY
+players.gender DESC,
+players.name

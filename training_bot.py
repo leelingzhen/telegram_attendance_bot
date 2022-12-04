@@ -106,6 +106,8 @@ def start(update: Update, context: CallbackContext)-> None:
 @send_typing_action
 def choosing_date_low_access(update:Update, context:CallbackContext) -> int:
     user = update.effective_user
+    helpers.refresh_player_profiles(update, context)
+
     logger.info("user %s is choosing date...", user.first_name)
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
@@ -132,6 +134,7 @@ def choosing_date_low_access(update:Update, context:CallbackContext) -> int:
 @send_typing_action
 def choosing_date_high_access(update:Update, context:CallbackContext) -> int:
     user = update.effective_user
+    helpers.refresh_player_profiles(update, context)
     logger.info("user %s is choosing date...", user.first_name)
     with sqlite3.connect(CONFIG['database']) as db:
         player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()[0]
@@ -266,7 +269,7 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     context.user_data["reason"] = ""
 
     button = [
-            [InlineKeyboardButton("Yes I ❤️ Alliance", callback_data="Yas")],
+            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data="Yas")],
             [InlineKeyboardButton("Yes but...", callback_data="Yes")],
             [InlineKeyboardButton("No (lame)", callback_data="No")],
             ]
@@ -336,7 +339,7 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
 
         if status == "Yes":
-            bot_comment = "See you at training! 🦾🦾"
+            bot_comment = f"See you at {event_data['event_type']}! 🦾🦾"
         elif status == "No":
             bot_comment = "Hope to see you soon🥲🥲"
 
@@ -381,10 +384,15 @@ Attendance: {status}\n\n"""
                             length=entity['entity_length']
                             )
                         )
-            context.bot.send_message(
+            message_obj = context.bot.send_message(
                     chat_id=user.id,
                     text=announcement,
                     entities=announcement_entities,
+                    )
+            context.bot.pin_chat_message(
+                    chat_id=user.id,
+                    message_id=message_obj.message_id,
+                    disable_notification=True
                     )
 
         elif context.user_data['prev_status'] == 'Not Indicated' and access_control < 4 and announcement is not None:
@@ -398,11 +406,17 @@ Attendance: {status}\n\n"""
                             length=entity['entity_length']
                             )
                         )
-            context.bot.send_message(
+            message_obj = context.bot.send_message(
                     chat_id=user.id,
                     text=announcement,
                     entities=announcement_entities,
                     )
+            context.bot.pin_chat_message(
+                    chat_id=user.id,
+                    message_id=message_obj.message_id,
+                    disable_notification=True
+                    )
+
 
     
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
@@ -412,6 +426,7 @@ Attendance: {status}\n\n"""
 @send_typing_action
 def choosing_more_dates(update:Update, context: CallbackContext)-> int:
     user = update.effective_user
+    helpers.refresh_player_profiles(update, context)
 
     logger.info("user %s used /attendance_plus...", user.first_name)
     with sqlite3.connect(CONFIG['database']) as db:
@@ -639,7 +654,7 @@ def events(update: Update, context: CallbackContext)-> None:
                 text += '\n'
 
         
-    update.message.reply_text(f"You'll 👀 Alliance on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
+    update.message.reply_text(f"You'll 👀 {CONFIG['team_name']}on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
@@ -680,16 +695,16 @@ Time: {start_time} - {end_time}
 Location : {event_data['location']}
 """
     query.edit_message_text(
-            text=f"Save the event to your calendar with the generated ics file!\n{text}",
+            text=f"{text}",
             parse_mode='html'
             )
 
 
-    with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
-        f.writelines(calendar.serialize_iter())
-    with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'rb') as f:
-        context.bot.send_document(user.id, f)
-    os.remove(f"{event_date.strftime('%-d %b, %a')}.ics")
+    #with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
+    #    f.writelines(calendar.serialize_iter())
+    #with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'rb') as f:
+    #    context.bot.send_document(user.id, f)
+    #os.remove(f"{event_date.strftime('%-d %b, %a')}.ics")
 
     logger.info("user %s has generated an ics file for %s", user.first_name, event_date.strftime("%d-%m-%y"))
 
@@ -902,7 +917,7 @@ def fill_name(update: Update, context: CallbackContext) -> int:
     context.user_data['gender'] = gender
 
     query.edit_message_text(
-            text="Send me your full name"
+            text="Send me your name with your surname!"
             )
     return 2
 
@@ -942,19 +957,19 @@ def commit_registration(update:Update, context:CallbackContext) -> int:
         db.commit()
 
     text = f"""
-You have sucessfully been registered! Please wait for the core team to approve your registration😊😊.
+You have sucessfully been registered! Please inform the core/exco team to approve your registration😊😊.
 
 Full name : {name}
-telegram handle : {telegram_user}
+telegram handle : @{telegram_user}
 Gender : {gender}
 
-Please do notify either <a href="tg://user?id=161579060">Owen</a>, <a href="tg://user?id=39135211">Mandy</a> or your contact in Alliance that you have already registered too!
 
     """
     bot_message.edit_text(
             text=text,
             parse_mode='html'
             )
+    logger.info('User %s has sucessfully registered', user.first_name)
     return ConversationHandler.END
 
 @send_typing_action
@@ -984,7 +999,7 @@ def review_membership(update:Update, context:CallbackContext) -> int:
     with open(os.path.join("resources", 'messages', 'membership_registration_terms.txt')) as f:
         text = f.read()
     buttons = [
-            [InlineKeyboardButton(text="I wanna be part of Alliance😊", callback_data="forward")],
+            [InlineKeyboardButton(text=f"I wanna be part of {CONFIG['team_name']}😊", callback_data="forward")],
             [InlineKeyboardButton(text="Maybe another time.", callback_data="cancel")]
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
@@ -1002,11 +1017,11 @@ def commit_membership_position(update:Update, context:CallbackContext) -> int:
             db.execute('UPDATE access_control SET control_id = 3 WHERE player_id = ?', (user.id, ))
             db.commit()
         text = f"""
-Thank you for your interest in being a club member of Alliance😇😇!!
+Thank you for your interest in being a member of {CONFIG['team_name']}😇😇!!
 Your commitment has been noted and is under the review of the core team 🥹
         """
         query.edit_message_text(text=text)
-        logger.info("user %s is now pending alliance membership approval", user.first_name)
+        logger.info("user %s is now pending membership approval", user.first_name)
         return ConversationHandler.END
     else:
         query.edit_message_text("We hope to see you soon!!")
@@ -1030,7 +1045,7 @@ def main():
     if CONFIG["development"]:
         token = bot_tokens["dev_bot"]
     else:
-        token = bot_tokens["alliance_bot"]
+        token = bot_tokens["training_bot"]
 
     commands = [
             BotCommand("start", "to start the bot"),
@@ -1041,7 +1056,7 @@ def main():
             BotCommand("event_details", "generate ics file for personal calendars"),
             BotCommand("settings", "access settings and refresh username if recently changed"),
             BotCommand("register", "use this command if you're a new player"),
-            BotCommand("apply_membership", "use this command if you'll like to be part of Alliance!"),
+            BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
             BotCommand("cancel", "cancel any process"),
             ]
 
