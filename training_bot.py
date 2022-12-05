@@ -677,16 +677,16 @@ def generate_ics(update: Update, context: CallbackContext) -> int:
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
 
         #calendar formatting
-        calendar_start= event_date.strftime("%Y-%m-%d %H:M%S")
-        calendar_end = event_date.strftime("%Y-%m-%d") + event_data["end_time"] + ":00"
-        calendar = Calendar()
-        calendar_event = Event(
-                name=f"Alliance {event_data['event_type']}",
-                begin=event_date.strftime("%Y-%m-%d %H:%M:%S"),
-                end=event_date.strftime("%Y-%m-%d") + " " + event_data["end_time"] + ":00",
-                location = event_data['location']
-                )
-        calendar.events.add(calendar_event)
+        #calendar_start= event_date.strftime("%Y-%m-%d %H:M%S")
+        #calendar_end = event_date.strftime("%Y-%m-%d") + event_data["end_time"] + ":00"
+        #calendar = Calendar()
+        #calendar_event = Event(
+        #        name=f"Alliance {event_data['event_type']}",
+        #        begin=event_date.strftime("%Y-%m-%d %H:%M:%S"),
+        #        end=event_date.strftime("%Y-%m-%d") + " " + event_data["end_time"] + ":00",
+        #        location = event_data['location']
+        #        )
+        #calendar.events.add(calendar_event)
     text = f"""
 <u>Details</u>
 Date: {event_date.strftime('%-d %b, %a')}
@@ -1048,7 +1048,7 @@ def main():
             BotCommand("kaypoh", "your friend never go u dw go is it??"),
             BotCommand("attendance_plus", "one shot update attendance"),
             BotCommand("events", "events that you are attending"),
-            BotCommand("event_details", "generate ics file for personal calendars"),
+            BotCommand("event_details", "Get event details"),
             BotCommand("settings", "access settings and refresh username if recently changed"),
             BotCommand("register", "use this command if you're a new player"),
             BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
