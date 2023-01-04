@@ -109,7 +109,7 @@ def get_tokens(filename=os.path.join('.secrets', 'bot_credentials.json')) -> dic
         bot_tokens=json.load(bot_token_file)
     return bot_tokens
 
-def mass_send(msg: str, send_list: sqlite3.Row, parse_mode=None, entities=None, development=True) -> str:
+def mass_send(msg: str, send_list: sqlite3.Row, parse_mode=None, entities=None, pin_message=True, development=True) -> str:
     #getting tokens
     bot_tokens = get_tokens()
     training_bot = Bot(token=bot_tokens['training_bot'])
@@ -131,11 +131,12 @@ def mass_send(msg: str, send_list: sqlite3.Row, parse_mode=None, entities=None, 
         except (Unauthorized, BadRequest):
             yield row['telegram_user']
         else:
-            bot_messenger.pin_chat_message(
-                    chat_id=row['id'],
-                    message_id=message_object.message_id,
-                    disable_notification=True
-                    )
+            if pin_message:
+                bot_messenger.pin_chat_message(
+                        chat_id=row['id'],
+                        message_id=message_object.message_id,
+                        disable_notification=True
+                        )
             yield ""
 
 def read_msg_from_file(filename, date_str: str) -> str:

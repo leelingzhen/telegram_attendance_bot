@@ -455,6 +455,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
             msg=remind_msg,
             send_list=unindicated_data,
             parse_mode='HTML',
+            pin_message=False,
             development=CONFIG['development']
             )
     unsent_names = ''
