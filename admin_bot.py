@@ -175,7 +175,11 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
         absent += player + "\n"
     unindicated = ''
     for row in unindicated_data:
-        unindicated += row['name'] + " - @" + row['telegram_user'] + '\n'
+        if not row['telegram_user']:
+            telegram_user_name = "privated"
+        else:
+            telegram_user_name = f"@{row['telegram_user']}"
+        unindicated += row['name'] + " - " + telegram_user_name + '\n'
 
 
     text = f"""
@@ -185,8 +189,6 @@ Attending boys: {len(player_data['attending_boys'])}
 {attending_boys}
 Attending girls: {len(player_data['attending_girls'])}
 {attending_girls}
-Absent: {len(player_data['absent'])}
-{absent}
 Not Indicated: {len(unindicated_data)}
 {unindicated}
 
@@ -281,7 +283,7 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
-    #getting relevant data
+    # getting relevant data
     event_id = context.user_data['event_id']
     event_date = context.user_data['event_date']
     event_type = context.user_data['event_type']

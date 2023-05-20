@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import helpers
 import json
 import sqlite3
@@ -31,13 +32,14 @@ with open("config.json") as f:
     CONFIG = json.load(f)
     db = sqlite3.connect(CONFIG['database'], check_same_thread=False)
 
-#enable logging
+# enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-#typing wrapper
+
+# typing wrapper
 def send_typing_action(func):
     """Sends typing action while processing func command."""
 
@@ -48,14 +50,15 @@ def send_typing_action(func):
 
     return command_func
 
+
 def secure(access=2):
     def decorator(func):
-    #admin restrictions
+        # admin restrictions
         @wraps(func)
         def wrapped(update, context, *args, **kwargs):
             user = update.effective_user
             with sqlite3.connect(CONFIG["database"]) as db:
-                db.row_factory = lambda cursor, row:row[0]
+                db.row_factory = lambda cursor, row: row[0]
                 user_clearance = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()
             if user_clearance < access:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
@@ -66,6 +69,7 @@ def secure(access=2):
             return func(update, context, *args, **kwargs)
         return wrapped
     return decorator
+
 
 @send_typing_action
 def start(update: Update, context: CallbackContext)-> None:
@@ -83,7 +87,7 @@ def start(update: Update, context: CallbackContext)-> None:
             db_insert = [chat_id, telegram_user]
             db.execute("INSERT INTO players(id, telegram_user) VALUES (?, ?)", db_insert)
 
-            #insert into access control
+            # insert into access control
             db_insert = [chat_id, 0]
             db.execute("INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", db_insert)
             db.commit()
@@ -102,9 +106,10 @@ def start(update: Update, context: CallbackContext)-> None:
         logger.info('user %s has talked to the bot', user.first_name)
     return None
 
+
 @secure(access=2)
 @send_typing_action
-def choosing_date_low_access(update:Update, context:CallbackContext) -> int:
+def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     helpers.refresh_player_profiles(update, context)
 
@@ -122,17 +127,18 @@ def choosing_date_low_access(update:Update, context:CallbackContext) -> int:
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
-        return ConversationHandler.END 
+        return ConversationHandler.END
 
-    update.message.reply_text( 
+    update.message.reply_text(
             text="Choose Date:",
             reply_markup=reply_markup
             )
     return 1
 
+
 @secure(access=4)
 @send_typing_action
-def choosing_date_high_access(update:Update, context:CallbackContext) -> int:
+def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     helpers.refresh_player_profiles(update, context)
     logger.info("user %s is choosing date...", user.first_name)
@@ -149,9 +155,9 @@ def choosing_date_high_access(update:Update, context:CallbackContext) -> int:
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
-        return ConversationHandler.END 
+        return ConversationHandler.END
 
-    update.message.reply_text( 
+    update.message.reply_text(
             text="Choose Date:",
             reply_markup=reply_markup
             )
@@ -170,7 +176,8 @@ def page_change(update: Update, context: CallbackContext) -> int:
             )
     return 1
 
-def attendance_list(update:Update, context:CallbackContext) -> int:
+
+def attendance_list(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     logger.info('user %s is a kaypoh', user.first_name)
     query = update.callback_query
@@ -180,15 +187,15 @@ def attendance_list(update:Update, context:CallbackContext) -> int:
             text="Kaypohing..."
             )
 
-    #retrieve selected event
+    # retrieve selected event
     event_id = int(query.data)
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
 
-        with open(os.path.join('resources','saved_sql_queries', 'available_attendance.sql')) as f:
+        with open(os.path.join('resources', 'saved_sql_queries', 'available_attendance.sql')) as f:
             sql_query = f.read()
-            player_data = db.execute(sql_query,(event_id, )).fetchall()
+            player_data = db.execute(sql_query, (event_id, )).fetchall()
             player_data = helpers.sql_to_dict(player_data)
 
         with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
@@ -210,8 +217,6 @@ def attendance_list(update:Update, context:CallbackContext) -> int:
     for row in unindicated_data:
         unindicated += row['name'] + '\n'
 
-
-
     newline = '\n'
     text = f"""
 Attendance for <b>{event['event_type']}</b> on <u>{event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')}</u> : {len(player_data['attending_boys']) + len(player_data['attending_girls'])}
@@ -231,17 +236,17 @@ Uninidicated: {len(unindicated_data)}
 
     return ConversationHandler.END
 
+
 def indicate_attendance(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     user_id = update.effective_user.id
-    
 
-    #retrieve date query and store
+    # retrieve date query and store
     selected_event = int(query.data)
     context.user_data["event_id"] = selected_event
 
-    #retrieve data 
+    # retrieve data
     with sqlite3.connect(CONFIG["database"]) as db:
         db.row_factory = sqlite3.Row
         attendance = db.execute("SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?", (selected_event, user_id)).fetchone()
@@ -250,8 +255,6 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
         training_date = event_date.strftime("%-d %b, %a")
         start_time= event_date.strftime("%-I:%M%p")
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
-
-
 
     if attendance is None:
 
@@ -263,7 +266,7 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
         prev_status = "Yes" if attendance["status"] == 1 else "No"
         prev_reason = attendance["reason"]
 
-    #store attendance into context
+    # store attendance into context
     context.user_data['event_data'] = event_data
     context.user_data["status"] = ""
     context.user_data["reason"] = ""
@@ -293,6 +296,7 @@ Would you like to go for {event_data['event_type']}?
             )
     return 2
 
+
 def give_reason(update: Update, context: CallbackContext) -> str:
     query = update.callback_query
     query.answer()
@@ -303,15 +307,15 @@ def give_reason(update: Update, context: CallbackContext) -> str:
             )
     return 2
 
+
 def update_attendance(update: Update, context: CallbackContext) -> str:
 
-    #retrieve indication of attendance
+    # retrieve indication of attendance
     status = context.user_data["status"]
 
     text = "updating your attendance..."
-    
     if status == "":
-        #indicated attendance is yas skipped give_reason
+        # indicated attendance is yas skipped give_reason
         query = update.callback_query
         query.answer()
         status = "Yes"
@@ -319,13 +323,14 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
         bot_message = query.edit_message_text(
                 text=text
                 )
-    else :
-        #retrieve reasons, went through give_reason
+    else:
+        # retrieve reasons, went through give_reason
         reason = update.message.text
+        reason = helpers.escape_html_tags(reason)
         bot_message = update.message.reply_text(
                 text=text
                 )
-    #get stored data
+    # get stored data
     user = update.effective_user
     event_id = context.user_data["event_id"]
     event_data = context.user_data['event_data']
@@ -333,7 +338,7 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
         start_datetime = datetime.strptime(str(event_id), "%Y%m%d%H%M")
-        
+
         training_date = start_datetime.strftime("%-d %b, %a")
         training_time = start_datetime.strftime("%-I:%M%p")
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
@@ -417,10 +422,9 @@ Attendance: {status}\n\n"""
                     disable_notification=True
                     )
 
-
-    
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
+
 
 @secure(access=4)
 @send_typing_action
@@ -438,14 +442,13 @@ def choosing_more_dates(update:Update, context: CallbackContext)-> int:
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
-        return ConversationHandler.END 
-    
+        return ConversationHandler.END
+
     buttons = helpers.date_buttons(event_data, pages=False)
     reply_markup = InlineKeyboardMarkup(buttons)
 
-
-    update.message.reply_text( 
-            text= """
+    update.message.reply_text(
+            text="""
 Select dates for events you want to update. Select them again to remove them from selection.
 
 Selected Dates:
@@ -455,14 +458,15 @@ Selected Dates:
             )
     return 1
 
-def choosing_more_dates_cont(update:Update, context: CallbackContext) -> int:
+
+def choosing_more_dates_cont(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
-    
-    #get query 
+
+    # get query
     event_id = int(query.data)
 
-    #retrieve choosent events
+    # retrieve choosent events
     chosen_events = context.user_data["chosen_events"]
     event_data = context.user_data["event_data"]
 
@@ -478,14 +482,13 @@ def choosing_more_dates_cont(update:Update, context: CallbackContext) -> int:
     for element in chosen_events:
         text += datetime.strptime(str(element), '%Y%m%d%H%M').strftime('%-d-%b-%-y, %a @ %-I:%M%p') + "\n"
 
-
-    #make buttons
+    # make buttons
     buttons = helpers.date_buttons(event_data, pages=False)
     buttons.append([InlineKeyboardButton(text='Confirm', callback_data='forward')])
     reply_markup = InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
-            text =f"""
+            text=f"""
 Select dates for events you want to update. Select them again to remove them from selection.
 
 Selected Dates:
@@ -497,11 +500,11 @@ Selected Dates:
 
     return 1
 
-def indicate_more(update: Update, context:CallbackContext) -> int:
+def indicate_more(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    #initialise status
+    # initialise status
     context.user_data["status"] = -1
 
     buttons = [
@@ -517,11 +520,12 @@ def indicate_more(update: Update, context:CallbackContext) -> int:
 
     return 2
 
-def give_reason_more(update: Update, context:CallbackContext) -> int:
+
+def give_reason_more(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    #save the query
+    # save the query
     context.user_data["status"] = int(query.data)
 
     query.edit_message_text(
@@ -529,15 +533,16 @@ def give_reason_more(update: Update, context:CallbackContext) -> int:
             )
     return 2
 
-def commit_attendance_plus(update: Update, context:CallbackContext) -> int:
-    #retrieve indication of attendance
+
+def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
+    # retrieve indication of attendance
     user = update.effective_user
     status = context.user_data["status"]
 
     text = "updating your attendance..."
-    
+
     if status == -1:
-        #indicated attendance is yes skipped give_reason_more
+        # indicated attendance is yes skipped give_reason_more
         query = update.callback_query
         query.answer()
         status = 1
@@ -545,32 +550,32 @@ def commit_attendance_plus(update: Update, context:CallbackContext) -> int:
         bot_message = query.edit_message_text(
                 text=text
                 )
-    else :
-        #retrieve reasons, went through give_reason
+    else:
+        # retrieve reasons, went through give_reason
         reason = update.message.text
         bot_message = update.message.reply_text(
                 text=text
                 )
-    #retrieve selected events
+    # retrieve selected events
     chosen_events = context.user_data['chosen_events']
 
-    #retrieve from database
+    # retrieve from database
     with sqlite3.connect(CONFIG['database']) as db:
-        #retrieve existing data that has already been indicated 
+        # retrieve existing data that has already been indicated 
         data = (user.id, date.today().strftime("%Y%m%d%H%M"))
         existing_events = db.execute("SELECT event_id FROM attendance WHERE player_id = ? AND event_id >= ?", data).fetchall()
         existing_events = list(sum(existing_events, ()))
         intersect_events = set(chosen_events).intersection(existing_events)
 
-        #add to database
+        # add to database
         db.execute("BEGIN TRANSACTION")
 
-        #first update existing records
+        # first update existing records
         if len(intersect_events) != 0: 
             data = [(status, reason, event_id, user.id) for event_id in intersect_events]
             db.executemany("UPDATE attendance SET status = ?, reason =? WHERE event_id = ? AND player_id = ?", data)
 
-        #get events which are not in record yet
+        # get events which are not in record yet
         remaining_chosen_events = set(chosen_events) - intersect_events
         if len(remaining_chosen_events) != 0:
             data = [(event_id, user.id, status, reason) for event_id in remaining_chosen_events]
@@ -578,7 +583,7 @@ def commit_attendance_plus(update: Update, context:CallbackContext) -> int:
         db.commit()
 
     chosen_events_str = ""
-    for event_id in chosen_events: 
+    for event_id in chosen_events:
         chosen_events_str += "    " + datetime.strptime(str(event_id), '%Y%m%d%H%M').strftime('%-d-%b-%-y, %a @ %-I:%M%p') + "\n"
 
     text = f"""
@@ -586,7 +591,7 @@ You have sucessfully updated your attendance for {len(chosen_events)} records!
 
 {chosen_events_str}
     Attendance : {"Yes" if status == 1 else "No"}
-    
+
     {'Comment/reason: ' + reason if reason != '' else ''}
 
     """
@@ -594,21 +599,18 @@ You have sucessfully updated your attendance for {len(chosen_events)} records!
     bot_message.edit_text(text=text)
     logger.info("user %s has sucessfully updated attendance for %d records", user.first_name, len(chosen_events))
 
-
     return ConversationHandler.END
 
 
-    
-
 @secure(access=2)
 @send_typing_action
-def events(update: Update, context: CallbackContext)-> None:
+def events(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     logger.info("User %s has started a query for his/her event schedule", user.first_name)
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
 
-        ## check if there are any existing events
+        # check if there are any existing events
         existing_events = db.execute("SELECT id FROM events WHERE id > ?", (date.today().strftime("%Y%m%d%H%M"), )).fetchall()
         if existing_events == list():
             update.message.reply_text("There are no future trainings planned Enjoy your break.😴😴")
@@ -619,19 +621,19 @@ def events(update: Update, context: CallbackContext)-> None:
         registered_events = db.execute("""
         SELECT id, event_type FROM events
         JOIN attendance ON events.id = attendance.event_id
-        WHERE attendance.player_id = ? 
-        AND attendance.event_id >= ? 
+        WHERE attendance.player_id = ?
+        AND attendance.event_id >= ?
         AND attendance.status = ?
         AND events.access_control <= ?
         ORDER BY id
-                """, 
+                """,
                 (user.id, date.today().strftime("%Y%m%d%H%M"), 1, player_access)
                 ).fetchall()
 
-        #sorting by categories
+        # sorting by categories
         dict_date = {
-                "Field Training" : list(),
-                "Scrim" : list(),
+                "Field Training": list(),
+                "Scrim": list(),
                 "Hardcourt/Track": list(),
                 "Gym/Pod": list(),
                 "Cohesion": list()
@@ -653,11 +655,11 @@ def events(update: Update, context: CallbackContext)-> None:
                     text += element + "\n"
                 text += '\n'
 
-        
     update.message.reply_text(f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
+
 
 @send_typing_action
 def generate_ics(update: Update, context: CallbackContext) -> int:
@@ -671,22 +673,22 @@ def generate_ics(update: Update, context: CallbackContext) -> int:
         event_data = db.execute("SELECT * FROM events WHERE id = ? ", (event_id, )).fetchone()
         event_date = datetime.strptime(str(event_id), "%Y%m%d%H%M")
 
-        #text formatting
+        # text formatting
         training_date = event_date.strftime("%-d %b, %a")
         start_time= event_date.strftime("%-I:%M%p")
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
 
-        #calendar formatting
-        #calendar_start= event_date.strftime("%Y-%m-%d %H:M%S")
-        #calendar_end = event_date.strftime("%Y-%m-%d") + event_data["end_time"] + ":00"
-        #calendar = Calendar()
-        #calendar_event = Event(
+        # calendar formatting
+        # calendar_start= event_date.strftime("%Y-%m-%d %H:M%S")
+        # calendar_end = event_date.strftime("%Y-%m-%d") + event_data["end_time"] + ":00"
+        # calendar = Calendar()
+        # calendar_event = Event(
         #        name=f"Alliance {event_data['event_type']}",
         #        begin=event_date.strftime("%Y-%m-%d %H:%M:%S"),
         #        end=event_date.strftime("%Y-%m-%d") + " " + event_data["end_time"] + ":00",
         #        location = event_data['location']
         #        )
-        #calendar.events.add(calendar_event)
+        # calendar.events.add(calendar_event)
     text = f"""
 <u>Details</u>
 Date: {event_date.strftime('%-d %b, %a')}
@@ -699,26 +701,23 @@ Location : {event_data['location']}
             parse_mode='html'
             )
 
-
-    #with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
+    # with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
     #    f.writelines(calendar.serialize_iter())
-    #with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'rb') as f:
+    # with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'rb') as f:
     #    context.bot.send_document(user.id, f)
-    #os.remove(f"{event_date.strftime('%-d %b, %a')}.ics")
+    # os.remove(f"{event_date.strftime('%-d %b, %a')}.ics")
 
     logger.info("user %s has generated an ics file for %s", user.first_name, event_date.strftime("%d-%m-%y"))
 
     return ConversationHandler.END
 
 
-   
-
 @secure(access=4)
 @send_typing_action
-def settings_start(update: Update, context: CallbackContext)-> int:
+def settings_start(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     logger.info("User %s is accessing settings...", user.first_name)
-    
+
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
         result = db.execute("SELECT * FROM players WHERE id = ?", (user.id, )).fetchone()
@@ -732,7 +731,7 @@ def settings_start(update: Update, context: CallbackContext)-> int:
         db.execute("UPDATE players SET username = ? WHERE id = ?", (user.username, user_id))
         db.commit()
 
-    #save into context
+    # save into context
     context.user_data["user_id"] = user.id
     context.user_data["name"] = name
     context.user_data["notification"] = notification
@@ -751,7 +750,8 @@ def settings_start(update: Update, context: CallbackContext)-> int:
             )
     return 1
 
-def name_change(update:Update, context:CallbackContext) -> float:
+
+def name_change(update: Update, context: CallbackContext) -> float:
     query = update.callback_query
     query.answer()
     query.edit_message_text(
@@ -767,7 +767,8 @@ otherwise /cancel to cancel the process
             )
     return 1.1
 
-def notification_change(update:Update, context:CallbackContext)-> float:
+
+def notification_change(update: Update, context: CallbackContext) -> float:
     query = update.callback_query
     query.answer()
     buttons = [
@@ -788,13 +789,13 @@ current selection - {'Yes'if context.user_data['notification'] == 1 else 'No'}
 
 Choose notification setting
                 """),
-                parse_mode = 'html',
-                reply_markup=InlineKeyboardMarkup(buttons)
-                
+            parse_mode='html',
+            reply_markup=InlineKeyboardMarkup(buttons)
             )
     return 1.2
 
-def language_change(update:Update, context:CallbackContext)-> int:
+
+def language_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     query.edit_message_text(
@@ -803,10 +804,11 @@ def language_change(update:Update, context:CallbackContext)-> int:
     logger.info("User %s tried to change language", context.user_data["name"])
     return ConversationHandler.END
 
-def commit_notification_change(update:Update, context:CallbackContext)-> int:
+
+def commit_notification_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
-    
+
     notification_setting = int(query.data)
     with sqlite3.connect(CONFIG["database"]) as db:
         db.execute("BEGIN TRANSACTION")
@@ -815,7 +817,7 @@ def commit_notification_change(update:Update, context:CallbackContext)-> int:
 
     query.edit_message_text(
             text=
-            f""" 
+            f"""
 You have sucessfully turned {'off' if notification_setting == 0 else 'on'} notifications
 
 <i>You are now an {'inactive player' if notification_setting == 0 else 'active player'}</i>
@@ -827,7 +829,7 @@ You have sucessfully turned {'off' if notification_setting == 0 else 'on'} notif
 
 
 @send_typing_action
-def confirmation_name_change(update:Update, context:CallbackContext) -> float:
+def confirmation_name_change(update: Update, context: CallbackContext) -> float:
     buttons = [
         [InlineKeyboardButton(text="Confirm", callback_data="forward")],
         [InlineKeyboardButton(text="Edit Name", callback_data="back")]
@@ -844,8 +846,6 @@ def confirmation_name_change(update:Update, context:CallbackContext) -> float:
                 )
         return 1.1
 
-
-    
     context.user_data["new_name"] = new_name
 
     bot_message = update.message.reply_text(
@@ -853,11 +853,12 @@ def confirmation_name_change(update:Update, context:CallbackContext) -> float:
             f"<u>{new_name}</u>\n\n"
             "confirm?",
             parse_mode="html",
-            reply_markup = InlineKeyboardMarkup(buttons)
+            reply_markup=InlineKeyboardMarkup(buttons)
             )
     return 2.1
 
-def commit_name_change(update:Update, context:CallbackContext) -> int:
+
+def commit_name_change(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
@@ -867,13 +868,12 @@ def commit_name_change(update:Update, context:CallbackContext) -> int:
         db.execute("BEGIN TRANSACTION")
         db.execute("UPDATE players SET name = ? WHERE id = ?", (new_name, context.user_data["user_id"]))
         db.commit()
-    
+
     query.edit_message_text(
             text=f"Name sucessfully changed to <u>{new_name}</u>",
-            parse_mode = "html"
+            parse_mode="html"
             )
     name = context.user_data["name"]
-    
     logging.info("User %s has changed name from %s to %s", user.username, name, new_name)
 
     return ConversationHandler.END
