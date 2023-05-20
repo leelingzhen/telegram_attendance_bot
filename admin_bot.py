@@ -37,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-#typing wrapper
+# typing wrapper
 def send_typing_action(func):
     """Sends typing action while processing func command."""
 
@@ -51,7 +51,7 @@ def send_typing_action(func):
 
 def secure(access=2):
     def decorator(func):
-    #admin restrictions
+    # admin restrictions
         @wraps(func)
         def wrapped(update, context, *args, **kwargs):
             user = update.effective_user
@@ -91,7 +91,7 @@ def start(update: Update, context: CallbackContext)-> None:
             db_insert = [chat_id, telegram_user]
             db.execute("INSERT INTO players(id, telegram_user) VALUES (?, ?)", db_insert)
 
-            #insert into access control
+            # insert into access control
             db_insert = [chat_id, 0]
             db.execute("INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", db_insert)
             db.commit()
@@ -189,6 +189,8 @@ Attending boys: {len(player_data['attending_boys'])}
 {attending_boys}
 Attending girls: {len(player_data['attending_girls'])}
 {attending_girls}
+Absent: {len(player_data['absent'])}
+{absent}
 Not Indicated: {len(unindicated_data)}
 {unindicated}
 
@@ -283,7 +285,7 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
-    # getting relevant data
+    #getting relevant data
     event_id = context.user_data['event_id']
     event_date = context.user_data['event_date']
     event_type = context.user_data['event_type']
