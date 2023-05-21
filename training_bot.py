@@ -1059,21 +1059,21 @@ def main():
 
     updater = Updater(token)
 
-    #dispatcher to register handlers
+    # dispatcher to register handlers
     dispatcher = updater.dispatcher
 
     conv_handler_attendance = ConversationHandler(
             entry_points=[CommandHandler("attendance", choosing_date_low_access)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
                     CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
                     ],
-                2 : [
+                2: [
                     CallbackQueryHandler(give_reason, pattern="^No$"),
                     CallbackQueryHandler(give_reason, pattern="^Yes$"),
                     CallbackQueryHandler(update_attendance, pattern="^Yas$"),
-                    MessageHandler(Filters.text & ~Filters.command ,update_attendance)
+                    MessageHandler(Filters.text & ~Filters.command, update_attendance)
                     ],
                 },
             fallbacks=[CommandHandler("cancel", cancel)],
@@ -1082,7 +1082,7 @@ def main():
     conv_handler_kaypoh = ConversationHandler(
             entry_points=[CommandHandler("kaypoh", choosing_date_high_access)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
                     CallbackQueryHandler(attendance_list, pattern='^(\d{10}|\d{12})$')
                     ],
@@ -1093,11 +1093,11 @@ def main():
     conv_handler_mass_attendance = ConversationHandler(
             entry_points=[CommandHandler("attendance_plus", choosing_more_dates)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(choosing_more_dates_cont, pattern='^(\d{10}|\d{12})$'),
                     CallbackQueryHandler(indicate_more, pattern='^forward$')
                     ],
-                2 : [
+                2: [
                     CallbackQueryHandler(give_reason_more, pattern="^0$"),
                     CallbackQueryHandler(commit_attendance_plus, pattern="^1$"),
                     MessageHandler(Filters.text & ~Filters.command, commit_attendance_plus)
@@ -1109,7 +1109,7 @@ def main():
     conv_handler_save_event = ConversationHandler(
             entry_points=[CommandHandler("event_details", choosing_date_low_access)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
                     CallbackQueryHandler(generate_ics, pattern='^(\d{10}|\d{12})$')
                     ],
@@ -1120,7 +1120,7 @@ def main():
     conv_handler_settings = ConversationHandler(
             entry_points=[CommandHandler("settings",settings_start)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(name_change, pattern="^name$"),
                     CallbackQueryHandler(notification_change, pattern="^notification$"),
                     CallbackQueryHandler(language_change, pattern="^language$")
@@ -1131,36 +1131,35 @@ def main():
                 CallbackQueryHandler(commit_name_change, pattern="^forward$"),
                 CallbackQueryHandler(name_change, pattern="^back$")
                 ],
-   },
-            fallbacks=[CommandHandler('cancel',cancel)],
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
                         )
 
     conv_handler_register = ConversationHandler(
-            entry_points = [CommandHandler("register", select_gender)],
+            entry_points=[CommandHandler("register", select_gender)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(fill_name, pattern='^Male$'),
                     CallbackQueryHandler(fill_name, pattern='Female')
                     ],
-                2 : [
+                2: [
                     MessageHandler(Filters.text & ~Filters.command, confirm_name_registration),
                     ],
-                3 : [
+                3: [
                     CallbackQueryHandler(commit_registration, pattern='^forward$')
                     ],
                 },
             fallbacks=[CommandHandler('cancel', cancel)],
             )
     conv_handler_apply_members = ConversationHandler(
-            entry_points = [CommandHandler("apply_membership", review_membership)],
+            entry_points=[CommandHandler("apply_membership", review_membership)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(commit_membership_position),
                     ],
                 },
             fallbacks=[CommandHandler('cancel', cancel)]
             )
-
 
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(conv_handler_attendance)

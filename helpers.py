@@ -1,7 +1,6 @@
 import sqlite3
 import json
 import os
-import re
 
 from datetime import datetime, date
 from telegram import (
