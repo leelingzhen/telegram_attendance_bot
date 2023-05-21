@@ -7,8 +7,8 @@ services:
         image: leelingzhen/telegram-admin-attendance-bot
         container_name: alliance_admin_bot
         volumes:
-            - .secrets:/alliance_bot/.secrets
-            - ./resources:/alliance_bot/resources
+            - .secrets:/attendance_bot/.secrets
+            - ./resources:/attendance_bot/resources
     training_bot:
         build:
             context: .
@@ -16,5 +16,5 @@ services:
         image: leelingzhen/telegram-attendance-bot
         container_name: alliance_training_bot
         volumes:
-            - .secrets:/alliance_bot/.secrets
-            - ./resources:/alliance_bot/resources
+            - .secrets:/attendance_bot/.secrets
+            - ./resources:/attendance_bot/resources
