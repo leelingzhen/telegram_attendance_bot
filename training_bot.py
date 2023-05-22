@@ -7,7 +7,7 @@ import sqlite3
 
 from datetime import date, datetime
 from functools import wraps
-from ics import Calendar, Event
+from bot_src import AttendanceBot
 
 from telegram import (
         Update,
@@ -74,36 +74,27 @@ def secure(access=2):
 @send_typing_action
 def start(update: Update, context: CallbackContext)-> None:
     user = update.effective_user
-    
-    if update.message is not None:
-        chat_id = update.message.chat.id
-        telegram_user = update.message.chat.username
-        first_name = update.message.chat.first_name
-    with sqlite3.connect(CONFIG["database"]) as db:
-        player_profile = db.execute("SELECT id, name, telegram_user, language_pack FROM players WHERE id = ?", (chat_id,)).fetchone()
+    user_instance = AttendanceBot(user)
+    # if update.message is not None:
+    #     chat_id = update.message.chat.id
+    #     telegram_user = update.message.chat.username
+    #     first_name = update.message.chat.first_name
 
-        if player_profile is None:
-            db.execute("BEGIN TRANSACTION")
-            db_insert = [chat_id, telegram_user]
-            db.execute("INSERT INTO players(id, telegram_user) VALUES (?, ?)", db_insert)
+    player_profile = user_instance.retrieve_user_data()
 
-            # insert into access control
-            db_insert = [chat_id, 0]
-            db.execute("INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", db_insert)
-            db.commit()
-            update.message.reply_text("Hello new player! please register yourself by using /register")
+    if player_profile is None:
+        return None
 
-            return None
+    player_access = user_instance.get_user_access()
+    if player_access == 0:
+        update.message.reply_text("Hello new player! please register yourself by using /register")
+        return None
 
-        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (chat_id,)).fetchone()[0]
-        if player_access == 0:
-            update.message.reply_text("Hello new player! please register yourself by using /register")
-            return None
+    elif player_access > 0:
+        # language_pack = player_profile[3]
+        update.message.reply_text("Hello please use the commands to talk to me!")
+    logger.info('user %s has talked to the bot', user.first_name)
 
-        elif player_access > 0:
-            language_pack = player_profile[3]
-            update.message.reply_text("Hello please use the commands to talk to me!")
-        logger.info('user %s has talked to the bot', user.first_name)
     return None
 
 
@@ -111,6 +102,7 @@ def start(update: Update, context: CallbackContext)-> None:
 @send_typing_action
 def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
+    user_instance = AttendanceBot(user)
     helpers.refresh_player_profiles(update, context)
 
     logger.info("user %s is choosing date...", user.first_name)
@@ -170,7 +162,11 @@ def page_change(update: Update, context: CallbackContext) -> int:
     scroll_val = int(query.data)
 
     context.user_data["page"] += scroll_val
-    reply_markup = InlineKeyboardMarkup(helpers.date_buttons(context.user_data["event_data"], page_num=context.user_data["page"]))
+    reply_markup = InlineKeyboardMarkup(
+            helpers.date_buttons(
+                context.user_data["event_data"],
+                page_num=context.user_data["page"])
+            )
     query.edit_message_reply_markup(
             reply_markup=reply_markup
             )
