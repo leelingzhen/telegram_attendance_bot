@@ -188,33 +188,6 @@ def attendance_list(update: Update, context: CallbackContext) -> int:
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
     pretty_event_date = event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')
 
-    # with sqlite3.connect(CONFIG['database']) as db:
-    #     db.row_factory = sqlite3.Row
-    #
-    #     with open(os.path.join('resources', 'saved_sql_queries', 'available_attendance.sql')) as f:
-    #         sql_query = f.read()
-    #         player_data = db.execute(sql_query, (event_id, )).fetchall()
-    #         player_data = helpers.sql_to_dict(player_data)
-    #
-    #     with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
-    #         sql_query = f.read()
-    #         unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
-    #
-    #     event = db.execute("SELECT * FROM events WHERE id = ?", (event_id, )).fetchone()
-    #
-    # attending_boys = ""
-    # for player in player_data['attending_boys']:
-    #     attending_boys += player + "\n"
-    # attending_girls = ''
-    # for player in player_data['attending_girls']:
-    #     attending_girls += player + "\n"
-    # absent = ''
-    # for player in player_data['absent']:
-    #     absent += player + "\n"
-    # unindicated = ''
-    # for row in unindicated_data:
-    #     unindicated += row['name'] + '\n'
-    #
     sep = '\n'
     text = f"""
 Attendance for <b>{event_instance.event_type}</b> on <u>{pretty_event_date}</u> : {total_attendees}
