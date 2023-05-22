@@ -67,10 +67,20 @@ class AttendanceBot:
             access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()[0]
         return access
 
+    def get_event_dates(self,
+                        from_date: date = 0) -> sqlite3.Row:
+        """
+        get the list of dates from a date
+        from_date :datetime.date
 
 
+        """
+        if from_date == 0:
+            from_date = date.today()
+        event_id = from_date.strftime('%Y%m%d%H%M')
 
-
-
-
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+            event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
+        return event_data
 

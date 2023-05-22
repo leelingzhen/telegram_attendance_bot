@@ -8,6 +8,7 @@ import sqlite3
 from datetime import date, datetime
 from functools import wraps
 from bot_src import AttendanceBot
+from training_event_manager import TrainingEventManager
 
 from telegram import (
         Update,
@@ -74,18 +75,15 @@ def secure(access=2):
 @send_typing_action
 def start(update: Update, context: CallbackContext)-> None:
     user = update.effective_user
-    user_instance = AttendanceBot(user)
-    # if update.message is not None:
-    #     chat_id = update.message.chat.id
-    #     telegram_user = update.message.chat.username
-    #     first_name = update.message.chat.first_name
+    training_bot_handler = AttendanceBot(user)
+    first_name = update.message.chat.first_name
 
-    player_profile = user_instance.retrieve_user_data()
+    player_profile = training_bot_handler.retrieve_user_data()
 
     if player_profile is None:
         return None
 
-    player_access = user_instance.get_user_access()
+    player_access = training_bot_handler.get_user_access()
     if player_access == 0:
         update.message.reply_text("Hello new player! please register yourself by using /register")
         return None
@@ -102,18 +100,16 @@ def start(update: Update, context: CallbackContext)-> None:
 @send_typing_action
 def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    user_instance = AttendanceBot(user)
+    training_bot_handler = AttendanceBot(user)
     helpers.refresh_player_profiles(update, context)
 
     logger.info("user %s is choosing date...", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()[0]
-        event_id = date.today().strftime('%Y%m%d%H%M')
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, player_access)).fetchall()
+
+    event_data = training_bot_handler.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
+    context.user_data["training_bot_handler"] = training_bot_handler
 
     reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
     # if there are no queried trainings
@@ -132,16 +128,15 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
 @send_typing_action
 def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
+    training_bot_handler = AttendanceBot(user)
     helpers.refresh_player_profiles(update, context)
+
     logger.info("user %s is choosing date...", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()[0]
-        db.row_factory = sqlite3.Row
-        event_id = date.today().strftime('%Y%m%d%H%M')
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, player_access)).fetchall()
+    event_data = training_bot_handler.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
+    context.user_data['training_bot_hanlder'] = training_bot_handler
 
     reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
     # if there are no queried trainings
@@ -185,47 +180,56 @@ def attendance_list(update: Update, context: CallbackContext) -> int:
 
     # retrieve selected event
     event_id = int(query.data)
+
+    event_instance = TrainingEventManager(event_id)
+    male_records, female_records, absentees, unindicated = event_instance.curate_attendance(attach_usernames=False)
+    total_attendees = len(male_records) + len(female_records)
+
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
+    pretty_event_date = event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')
 
-        with open(os.path.join('resources', 'saved_sql_queries', 'available_attendance.sql')) as f:
-            sql_query = f.read()
-            player_data = db.execute(sql_query, (event_id, )).fetchall()
-            player_data = helpers.sql_to_dict(player_data)
-
-        with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
-            sql_query = f.read()
-            unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
-
-        event = db.execute("SELECT * FROM events WHERE id = ?", (event_id, )).fetchone()
-
-    attending_boys = ""
-    for player in player_data['attending_boys']:
-        attending_boys += player + "\n"
-    attending_girls = ''
-    for player in player_data['attending_girls']:
-        attending_girls += player + "\n"
-    absent = ''
-    for player in player_data['absent']:
-        absent += player + "\n"
-    unindicated = ''
-    for row in unindicated_data:
-        unindicated += row['name'] + '\n'
-
-    newline = '\n'
+    # with sqlite3.connect(CONFIG['database']) as db:
+    #     db.row_factory = sqlite3.Row
+    #
+    #     with open(os.path.join('resources', 'saved_sql_queries', 'available_attendance.sql')) as f:
+    #         sql_query = f.read()
+    #         player_data = db.execute(sql_query, (event_id, )).fetchall()
+    #         player_data = helpers.sql_to_dict(player_data)
+    #
+    #     with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
+    #         sql_query = f.read()
+    #         unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
+    #
+    #     event = db.execute("SELECT * FROM events WHERE id = ?", (event_id, )).fetchone()
+    #
+    # attending_boys = ""
+    # for player in player_data['attending_boys']:
+    #     attending_boys += player + "\n"
+    # attending_girls = ''
+    # for player in player_data['attending_girls']:
+    #     attending_girls += player + "\n"
+    # absent = ''
+    # for player in player_data['absent']:
+    #     absent += player + "\n"
+    # unindicated = ''
+    # for row in unindicated_data:
+    #     unindicated += row['name'] + '\n'
+    #
+    sep = '\n'
     text = f"""
-Attendance for <b>{event['event_type']}</b> on <u>{event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')}</u> : {len(player_data['attending_boys']) + len(player_data['attending_girls'])}
+Attendance for <b>{event_instance.event_type}</b> on <u>{pretty_event_date}</u> : {total_attendees}
 
-Attending 👦🏻: {len(player_data['attending_boys'])}
-{attending_boys}
-Attending 👩🏻: {len(player_data['attending_girls'])}
-{attending_girls}
-Absent: {len(player_data['absent'])}
-{absent}
+Attending 👦🏻: {len(male_records)}
+{sep.join(male_records)}
 
-Uninidicated: {len(unindicated_data)}
-{unindicated}
+Attending 👩🏻: {len(female_records)}
+{sep.join(female_records)}
+
+Absent: {len(absentees)}
+{sep.join(absentees)}
+
+Uninidicated: {len(unindicated)}
+{sep.join(unindicated)}
 
     """
     query.edit_message_text(text=text, parse_mode='html')
