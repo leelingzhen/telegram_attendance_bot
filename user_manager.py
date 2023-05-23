@@ -9,12 +9,12 @@ from datetime import date, datetime
 with open("config.json") as f:
     CONFIG = json.load(f)
     db = sqlite3.connect(
-            CONFIG['database'],
-            check_same_thread=False
-            )
+        CONFIG['database'],
+        check_same_thread=False
+    )
 
 
-class AttendanceBot:
+class UserManager:
     def __init__(self, user: dict):
         """
         intialise user from telegram message context
@@ -24,7 +24,6 @@ class AttendanceBot:
         self.first_name = user['first_name']
         self.is_bot = user['is_bot']
         self.access = self.get_user_access()
-        
 
     def retrieve_user_data(self) -> list:
         """
@@ -35,9 +34,9 @@ class AttendanceBot:
 
         with sqlite3.connect(CONFIG["database"]) as db:
             user_profile = db.execute(
-                    "SELECT id, name, telegram_user, language_pack FROM players WHERE id = ?",
-                    (self.id,)
-                    ).fetchone()
+                "SELECT id, name, telegram_user, language_pack FROM players WHERE id = ?",
+                (self.id,)
+            ).fetchone()
 
             if user_profile is None:
                 self.cache_new_user()
@@ -50,11 +49,13 @@ class AttendanceBot:
         with sqlite3.connect(CONFIG["database"]) as db:
             db.execute("BEGIN TRANSACTION")
             data = [self.id, self.username]
-            db.execute("INSERT INTO players(id, telegram_user) VALUES (?, ?)", data)
+            db.execute(
+                "INSERT INTO players(id, telegram_user) VALUES (?, ?)", data)
 
             # insert into access control
             data = [self.id, 0]
-            db.execute("INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", data)
+            db.execute(
+                "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", data)
             db.commit()
         return None
 
@@ -64,7 +65,8 @@ class AttendanceBot:
         returns an int
         """
         with sqlite3.connect(CONFIG["database"]) as db:
-            access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()[0]
+            access = db.execute(
+                "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()[0]
         return access
 
     def get_event_dates(self,
@@ -81,6 +83,6 @@ class AttendanceBot:
 
         with sqlite3.connect(CONFIG['database']) as db:
             db.row_factory = sqlite3.Row
-            event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
+            event_data = db.execute(
+                "SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
         return event_data
-

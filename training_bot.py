@@ -7,8 +7,8 @@ import sqlite3
 
 from datetime import date, datetime
 from functools import wraps
-from bot_src import AttendanceBot
-from training_event_manager import TrainingEventManager
+from user_manager import UserManager
+from training_event_manager import TrainingEventManager, AttendanceManager
 
 from telegram import (
         Update,
@@ -75,15 +75,14 @@ def secure(access=2):
 @send_typing_action
 def start(update: Update, context: CallbackContext)-> None:
     user = update.effective_user
-    training_bot_handler = AttendanceBot(user)
-    first_name = update.message.chat.first_name
+    user_instance = UserManager(user)
 
-    player_profile = training_bot_handler.retrieve_user_data()
+    player_profile = user_instance.retrieve_user_data()
 
     if player_profile is None:
         return None
 
-    player_access = training_bot_handler.get_user_access()
+    player_access = user_instance.get_user_access()
     if player_access == 0:
         update.message.reply_text("Hello new player! please register yourself by using /register")
         return None
@@ -100,16 +99,16 @@ def start(update: Update, context: CallbackContext)-> None:
 @send_typing_action
 def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    training_bot_handler = AttendanceBot(user)
+    user_instance = UserManager(user)
     helpers.refresh_player_profiles(update, context)
 
     logger.info("user %s is choosing date...", user.first_name)
 
-    event_data = training_bot_handler.get_event_dates()
+    event_data = user_instance.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
-    context.user_data["training_bot_handler"] = training_bot_handler
+    context.user_data["user_instance"] = user_instance
 
     reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
     # if there are no queried trainings
@@ -128,15 +127,15 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
 @send_typing_action
 def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    training_bot_handler = AttendanceBot(user)
+    user_instance = UserManager(user)
     helpers.refresh_player_profiles(update, context)
 
     logger.info("user %s is choosing date...", user.first_name)
-    event_data = training_bot_handler.get_event_dates()
+    event_data = user_instance.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
-    context.user_data['training_bot_hanlder'] = training_bot_handler
+    context.user_data['user_instance'] = user_instance
 
     reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
     # if there are no queried trainings
@@ -213,57 +212,41 @@ Uninidicated: {len(unindicated)}
 def indicate_attendance(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
-    user_id = update.effective_user.id
 
     # retrieve date query and store
     selected_event = int(query.data)
-    context.user_data["event_id"] = selected_event
+    event_instance = TrainingEventManager(selected_event)
+    user_instance = context.user_data['user_instance']
 
     # retrieve data
-    with sqlite3.connect(CONFIG["database"]) as db:
-        db.row_factory = sqlite3.Row
-        attendance = db.execute("SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?", (selected_event, user_id)).fetchone()
-        event_data = db.execute("SELECT * FROM events WHERE id = ?", (selected_event, )).fetchone()
-        event_date = datetime.strptime(str(selected_event), "%Y%m%d%H%M")
-        training_date = event_date.strftime("%-d %b, %a")
-        start_time= event_date.strftime("%-I:%M%p")
-        end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
-
-    if attendance is None:
-
-        context.user_data["prev_status"] = "Not Indicated"
-        prev_status = "Not Indicated"
-        prev_reason = ""
-    else:
-        context.user_data["prev_status"] = attendance["status"]
-        prev_status = "Yes" if attendance["status"] == 1 else "No"
-        prev_reason = attendance["reason"]
+    attendance = AttendanceManager(user_instance.id, event_instance.id)
+    event_date = event_instance.get_event_date()
 
     # store attendance into context
-    context.user_data['event_data'] = event_data
-    context.user_data["status"] = ""
-    context.user_data["reason"] = ""
+    context.user_data["event_instance"] = event_instance
+    context.user_data['attendance'] = attendance
+    context.user_data['prev_status'] = attendance.get_status()
+    context.user_data["gave_reason"] = False
 
     button = [
-            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data="Yas")],
-            [InlineKeyboardButton("Yes but...", callback_data="Yes")],
-            [InlineKeyboardButton("No (lame)", callback_data="No")],
+            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data="2")],
+            [InlineKeyboardButton("Yes but...", callback_data="1")],
+            [InlineKeyboardButton("No (lame)", callback_data="0")],
             ]
     reply_markup = InlineKeyboardMarkup(button)
 
     query.edit_message_text(
             text=f"""
-Your attendance is indicated as \'{prev_status}{'' if prev_reason =='' else f' ({prev_reason})'}\'
+Your attendance is indicated as \'{attendance.pretty_attendance()}\'
 
 <u>Details</u>
 Date: {event_date.strftime('%-d %b, %a')}
-Event: {event_data['event_type']}
-Time: {start_time} - {end_time}
-Location : {event_data['location']}
+Event: {event_instance.event_type}
+Time: {event_instance.pretty_start()} - {event_instance.pretty_end()}
+Location : {event_instance.location}
 
-Would you like to go for {event_data['event_type']}?
-            """
-            ,
+Would you like to go for {event_instance.event_type}?
+            """,
             reply_markup=reply_markup,
             parse_mode='html'
             )
@@ -273,7 +256,13 @@ Would you like to go for {event_data['event_type']}?
 def give_reason(update: Update, context: CallbackContext) -> str:
     query = update.callback_query
     query.answer()
-    context.user_data["status"] = query.data
+    status = int(query.data)
+
+    attendance = context.user_data["attendance"]
+    attendance.set_status(status)
+
+    context.user_data['attendance'] = attendance
+    context.user_data["gave_reason"] = True
 
     query.edit_message_text(
             text="Please write a comment/reason 😏"
@@ -284,15 +273,19 @@ def give_reason(update: Update, context: CallbackContext) -> str:
 def update_attendance(update: Update, context: CallbackContext) -> str:
 
     # retrieve indication of attendance
-    status = context.user_data["status"]
+    attendance = context.user_data['attendance']
+    gave_reason = context.user_data['gave_reason']
+    user_instance = context.user_data['user_instance']
+    event_instance = context.user_data['event_instance']
+    prev_status = context.user_data['prev_status']
 
     text = "updating your attendance..."
-    if status == "":
-        # indicated attendance is yas skipped give_reason
+    if not gave_reason:
+        # indicated attendance is yes skipped give_reason
         query = update.callback_query
         query.answer()
-        status = "Yes"
-        reason = ""
+        attendance.set_status(1)
+        attendance.set_reason("")
         bot_message = query.edit_message_text(
                 text=text
                 )
@@ -300,100 +293,44 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
         # retrieve reasons, went through give_reason
         reason = update.message.text
         reason = helpers.escape_html_tags(reason)
+        attendance.set_reason(reason)
         bot_message = update.message.reply_text(
                 text=text
                 )
-    # get stored data
-    user = update.effective_user
-    event_id = context.user_data["event_id"]
-    event_data = context.user_data['event_data']
 
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        start_datetime = datetime.strptime(str(event_id), "%Y%m%d%H%M")
+    bot_comment = "Hope to see you soon🥲🥲"
+    if attendance.is_attending():
+        bot_comment = f"See you at {event_instance.event_type}! 🦾🦾"
+    attendance.update_records()
+    event_date = event_instance.get_event_date().strftime('%-d %b, %a')
 
-        training_date = start_datetime.strftime("%-d %b, %a")
-        training_time = start_datetime.strftime("%-I:%M%p")
-        end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
-
-        if status == "Yes":
-            bot_comment = f"See you at {event_data['event_type']}! 🦾🦾"
-        elif status == "No":
-            bot_comment = "Hope to see you soon🥲🥲"
-
-        db.execute("BEGIN TRANSACTION")
-        if context.user_data["prev_status"] == "Not Indicated":
-            data = (event_id, user.id, 1 if status == "Yes" else 0, reason)
-            db.execute("INSERT INTO attendance (event_id, player_id, status, reason) VALUES (?, ?, ?, ?)", data)
-        else:
-            data = (1 if status == "Yes" else 0, reason, event_id, user.id)
-            db.execute("UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?", data)
-        db.commit()
-
-        text = f"""
+    text = f"""
 You have sucessfully updated your attendance! 🤖🤖\n
 <u>Details</u>
-Date: {training_date}
-Event: {event_data['event_type']}
-Time: {training_time} - {end_time}
-Location : {event_data['location']}
-Attendance: {status}\n\n""" 
+Date: {event_date}
+Event: {event_instance.event_type}
+Time: {event_instance.pretty_start()} - {event_instance.pretty_end()}
+Location : {event_instance.location}
+Attendance: {'Yes' if attendance.status else 'No'}
+"""
+    if attendance.reason:
+        text += f"Comments: {attendance.reason}\n\n"
 
-        if reason != "":
-            text += f"Comments: {reason}\n\n" 
+    bot_message.edit_text(text=text + bot_comment, parse_mode='html')
 
-        bot_message.edit_text(
-                text=text + bot_comment,
-                parse_mode='html'
+    if helpers.resend_announcement(prev_status,
+                                   event_instance.announcement,
+                                   user_instance.access):
+        message_obj = context.bot.send_message(
+                chat_id=user_instance.id,
+                text=event_instance.announcement,
+                entities=event_instance.announcement_entities,
                 )
-
-        announcement = db.execute('SELECT announcement FROM events WHERE id = ?', (event_id, )).fetchone()['announcement']
-        access_control = db.execute('SELECT control_id FROM access_control WHERE player_id = ?', (user.id, )).fetchone()['control_id']
-
-        if context.user_data["prev_status"] == 0 and announcement is not None:
-
-            entity_data = db.execute('SELECT * FROM announcement_entities WHERE event_id = ?', (event_id, )).fetchall()
-            announcement_entities = []
-            for entity in entity_data:
-                announcement_entities.append(
-                        MessageEntity(
-                            type=entity['entity_type'],
-                            offset=entity['offset'],
-                            length=entity['entity_length']
-                            )
-                        )
-            message_obj = context.bot.send_message(
-                    chat_id=user.id,
-                    text=announcement,
-                    entities=announcement_entities,
-                    )
-            context.bot.pin_chat_message(
-                    chat_id=user.id,
-                    message_id=message_obj.message_id,
-                    disable_notification=True
-                    )
-
-        elif context.user_data['prev_status'] == 'Not Indicated' and access_control < 4 and announcement is not None:
-            entity_data = db.execute('SELECT * FROM announcement_entities WHERE event_id = ?', (event_id, )).fetchall()
-            announcement_entities = []
-            for entity in entity_data:
-                announcement_entities.append(
-                        MessageEntity(
-                            type=entity['entity_type'],
-                            offset=entity['offset'],
-                            length=entity['entity_length']
-                            )
-                        )
-            message_obj = context.bot.send_message(
-                    chat_id=user.id,
-                    text=announcement,
-                    entities=announcement_entities,
-                    )
-            context.bot.pin_chat_message(
-                    chat_id=user.id,
-                    message_id=message_obj.message_id,
-                    disable_notification=True
-                    )
+        context.bot.pin_chat_message(
+                chat_id=user_instance.id,
+                message_id=message_obj.message_id,
+                disable_notification=True
+                )
 
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
@@ -1043,9 +980,9 @@ def main():
                     CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
                     ],
                 2: [
-                    CallbackQueryHandler(give_reason, pattern="^No$"),
-                    CallbackQueryHandler(give_reason, pattern="^Yes$"),
-                    CallbackQueryHandler(update_attendance, pattern="^Yas$"),
+                    CallbackQueryHandler(give_reason, pattern="^0$"),
+                    CallbackQueryHandler(give_reason, pattern="^1$"),
+                    CallbackQueryHandler(update_attendance, pattern="^2$"),
                     MessageHandler(Filters.text & ~Filters.command, update_attendance)
                     ],
                 },

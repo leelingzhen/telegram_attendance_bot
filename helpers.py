@@ -194,3 +194,14 @@ def refresh_player_profiles(update: Update, context: CallbackContext):
         db.commit()
 
     return None
+
+
+def resend_announcement(prev_status, announcement, access) -> bool:
+    if prev_status == 0 and announcement:
+        return True
+    if prev_status == -1 and access < 4 and announcement:
+        return True
+    return False
+
+
+    
