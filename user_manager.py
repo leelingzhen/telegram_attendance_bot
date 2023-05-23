@@ -86,3 +86,43 @@ class UserManager:
             event_data = db.execute(
                 "SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
         return event_data
+
+    def attending_events(self, from_date: datetime = None) -> dict:
+        """
+        returns a dictionary of attending events
+        """
+        if from_date is None:
+            from_date = date.today()
+        event_id = from_date.strftime('%Y%m%d%H%M')
+
+        with sqlite3.connect(CONFIG["database"]) as db:
+            db.row_factory = sqlite3.Row
+            data = db.execute("""
+                    SELECT id, event_type FROM events
+                    JOIN attendance ON events.id = attendance.event_id
+                    WHERE attendance.player_id = ?
+                    AND attendance.event_id >= ?
+                    AND attendance.status = ?
+                    AND events.access_control <= ?
+                    ORDER BY id
+                                          """,
+                              (self.id, event_id, 1, self.access)
+                              ).fetchall()
+            # sorting by categories
+            if data is None:
+                return dict()
+
+            dict_date = {
+                    "Field Training": list(),
+                    "Scrim": list(),
+                    "Hardcourt/Track": list(),
+                    "Gym/Pod": list(),
+                    "Cohesion": list()
+                    }
+
+            for row_obj in data:
+                event_date = datetime.strptime(str(row_obj["id"]), '%Y%m%d%H%M')
+                event_type = row_obj["event_type"]
+                dict_date[event_type].append(event_date)
+
+        return dict_date

@@ -516,56 +516,26 @@ You have sucessfully updated your attendance for {len(chosen_events)} records!
 @send_typing_action
 def events(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
+    user_instance = UserManager(user)
+
     logger.info("User %s has started a query for his/her event schedule", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
 
-        # check if there are any existing events
-        existing_events = db.execute("SELECT id FROM events WHERE id > ?", (date.today().strftime("%Y%m%d%H%M"), )).fetchall()
-        if existing_events == list():
-            update.message.reply_text("There are no future trainings planned Enjoy your break.😴😴")
-            logger.info("user %s has sucessfully queried for events and there are no further events planned", user.first_name)
-            return None
-        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()['control_id']
+    dict_date = user_instance.attending_events()
+    text = ""
+    for key in dict_date:
+        # no registered dates of this category
+        if dict_date[key] == list():
+            continue
+        else:
+            text += f"<u>{key}</u>\n"
+            for event_date in dict_date[key]:
+                text += event_date.strftime('%d %b, %a @ %-I:%M%p') + "\n"
+            text += '\n'
 
-        registered_events = db.execute("""
-        SELECT id, event_type FROM events
-        JOIN attendance ON events.id = attendance.event_id
-        WHERE attendance.player_id = ?
-        AND attendance.event_id >= ?
-        AND attendance.status = ?
-        AND events.access_control <= ?
-        ORDER BY id
-                """,
-                (user.id, date.today().strftime("%Y%m%d%H%M"), 1, player_access)
-                ).fetchall()
-
-        # sorting by categories
-        dict_date = {
-                "Field Training": list(),
-                "Scrim": list(),
-                "Hardcourt/Track": list(),
-                "Gym/Pod": list(),
-                "Cohesion": list()
-                }
-
-        for row_obj in registered_events:
-            event_date = datetime.strptime(str(row_obj["id"]), '%Y%m%d%H%M')
-            event_type = row_obj["event_type"]
-            dict_date[event_type].append(f"{event_date.strftime('%d %b, %a @ %-I:%M%p')}")
-
-        text = ""
-        for key in dict_date:
-            # no registered dates of this category
-            if dict_date[key] == list():
-                continue
-            else:
-                text += f"<u>{key}</u>\n"
-                for element in dict_date[key]:
-                    text += element + "\n"
-                text += '\n'
-
-    update.message.reply_text(f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿", parse_mode='html')
+    update.message.reply_text(
+            f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿",
+            parse_mode='html'
+            )
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
