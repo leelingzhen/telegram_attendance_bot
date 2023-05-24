@@ -133,15 +133,6 @@ class TrainingEventManager:
         self.announcement_entities = entities
         return entities
 
-
-        def update_entities(self):
-            if self.announcement_entities is None:
-                res = self.generate_entities()
-
-            if res is None:
-
-
-
     def pretty_start(self) -> str:
         return self.start_time.strftime("%-I:%M%p")
 
@@ -184,7 +175,7 @@ class TrainingEventManager:
             db.row_factory = sqlite3.Row
             player_data = db.execute("""
                 SELECT
-                    name, gender, telegram_user,
+                    id, name, gender, telegram_user,
                     access_control.control_id,
                     attendance.status, attendance.reason
                 FROM players
@@ -220,7 +211,7 @@ class TrainingEventManager:
             db.row_factory = sqlite3.Row
             player_data = db.execute("""
                 SELECT
-                    name, gender, telegram_user,
+                    id, name, gender, telegram_user,
                     access_control.control_id,
                     attendance.status, attendance.reason
                 FROM players
@@ -341,5 +332,32 @@ class TrainingEventManager:
 
 
 class AdminEventManager(TrainingEventManager):
-    def __init__(self, id):
+    def __init__(self, id, exists=True):
         super().__init__(id)
+        self.exists = exists
+
+    def update_announcement_entities(self, msg, entity_data=None):
+
+        new_entity_data = list()
+        for entity in entity_data:
+            data = (self.id, entity.type, entity.offset, entity.length)
+            new_entity_data.append(data)
+
+        if self.announcement_entities is None:
+            self.generate_entities()
+
+        # change implementation of this
+        # want to have a method to update the record as a whole
+        # might have to change the definition of TrainingEventManager Class
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+
+            db.execute("DELETE FROM announcement_entities WHERE event_id = ?", (self.id, ))
+
+            if new_entity_data:
+                db.executemany("INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", new_entity_data)
+            db.execute('UPDATE events SET announcement = ? WHERE id = ?', (msg, self.id))
+            db.commit()
+
+
+ 

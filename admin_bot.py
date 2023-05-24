@@ -277,72 +277,45 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
     admin_msg=query.edit_message_text(
                 "saving event announcement...\n"
                 )
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.execute('BEGIN TRANSACTION')
-        entity_data = list()
-        for entity in msg_entities:
-            data = (event_id, entity.type, entity.offset, entity.length)
-            entity_data.append(data)
 
-        existing_announcement = db.execute('SELECT event_id FROM announcement_entities WHERE event_id= ?', (event_id,)).fetchall()
-        # remove existing entities
-        if len(existing_announcement) > 0:
-            db.execute("DELETE FROM announcement_entities WHERE event_id = ?", (event_id, ))
-
-        db.executemany("INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", entity_data)
-        db.execute('UPDATE events SET announcement = ? WHERE id = ?', (msg, event_id))
-        db.commit()
-        
-        admin_msg.edit_text(
-            "getting players...\n"
+    event.update_announcement_entities(
+            msg=announcement, entity_data=msg_entities
             )
-        with open(os.path.join('resources', 'saved_sql_queries', 'attending.sql')) as f:
-            sql_query = f.read()
-            db.row_factory = sqlite3.Row
-            send_list = db.execute(sql_query,(event_id, )).fetchall()
-        with open (os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
-            sql_query = f.read()
-            send_list += db.execute(sql_query, (event_id,)).fetchall()
 
-        #adding team managers 
-        send_list += db.execute('SELECT * FROM players JOIN access_control ON players.id = access_control.player_id WHERE access_control.control_id = 7').fetchall()
+    admin_msg.edit_text(
+        "getting players...\n"
+        )
+    send_list = event.attendance_of_members(1, "Male")
+    send_list += event.attendance_of_members(1, "Female")
+    send_list += event.unindicated_members()
 
-        #adding hidden_sends
-        hidden_send_list = db.execute('SELECT * FROM players WHERE hidden = 1').fetchall()
-
-
+    # #adding team managers
+    # send_list += db.execute('SELECT * FROM players JOIN access_control ON players.id = access_control.player_id WHERE access_control.control_id = 7').fetchall()
 
     admin_msg.edit_text(
             "getting players... done.\n"
             f"Sending event announcements... 0/{len(send_list)}"
             )
-    send_message_generator = helpers.mass_send(
-            msg=msg,
+    send_message_generator = user_instance.send_message_by_list(
             send_list=send_list,
-            entities=msg_entities,
-            development=CONFIG['development']
+            msg=announcement,
+            msg_entities=msg_entities,
+            pin=True
             )
 
-    unsent_names = ''
-    for i, _ in enumerate(send_list):
-        unsent_name = next(send_message_generator)
-        if unsent_name != "":
-            unsent_names += ' @' + unsent_name +","
-        admin_msg.edit_text(f"Sending event announcements... {i+1}/{len(send_list)}")
+    failed_sends = list()
+    for i in range(len(send_list)):
+        admin_msg.edit_text(
+                f"Sending event announcements... {i}/{len(send_list)}"
+                )
 
-    send_message_generator = helpers.mass_send(
-            msg=msg,
-            send_list=hidden_send_list,
-            entities=msg_entities,
-            development=CONFIG['development']
-            )
+        outcome = next(send_message_generator)
+        if outcome != "success":
+            failed_sends.append(outcome)
 
-    for row in hidden_send_list:
-         next(send_message_generator)
-
-
+    failed_users = ', '.join(failed_sends)
     admin_msg.edit_text(
-            "Sending event announcements complete. list of uncompleted sends: \n\n" #+ unsent_names,
+            f"Sending event announcements complete. list of uncompleted sends: \n\n{failed_users}"
             )
 
     logger.info("User %s sucessfully sent event messages", user.first_name)
