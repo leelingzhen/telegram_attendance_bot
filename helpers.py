@@ -202,6 +202,3 @@ def resend_announcement(prev_status, announcement, access) -> bool:
     if prev_status == -1 and access < 4 and announcement:
         return True
     return False
-
-
-    

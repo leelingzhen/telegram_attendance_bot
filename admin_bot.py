@@ -7,6 +7,9 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from functools import wraps
 
+from user_manager import UserManager, AdminUser
+from training_event_manager import AdminEventManager, AttendanceManager
+
 from telegram import (
         Update,
         ForceReply,
@@ -51,20 +54,19 @@ def send_typing_action(func):
 
 def secure(access=2):
     def decorator(func):
-    # admin restrictions
+        # admin restrictions
         @wraps(func)
         def wrapped(update, context, *args, **kwargs):
             user = update.effective_user
-            with sqlite3.connect(CONFIG["database"]) as db:
-                db.row_factory = lambda cursor, row:row[0]
-                user_clearance = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()
-            if user_clearance < 5:
+            user_instance = UserManager(user)
+            context.user_data['user_instance'] = user_instance
+            if user_instance.access < 5:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
                 update.message.reply_text(
                         text='you do not have access to this bot, please contact adminstrators'
                         )
                 return
-            elif user_clearance < access:
+            elif user_instance.access < access:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
                 update.message.reply_text(
                         text='you do not have access to this function, please contact adminstrators'
@@ -77,41 +79,27 @@ def secure(access=2):
 
 @secure(access=5)
 @send_typing_action
-def start(update: Update, context: CallbackContext)-> None:
-    
-    if update.message is not None:
-        chat_id = update.message.chat.id
-        telegram_user = update.message.chat.username
-        first_name = update.message.chat.first_name
-    with sqlite3.connect(CONFIG["database"]) as db:
-        player_profile = db.execute("SELECT id, name, telegram_user, language_pack FROM players WHERE id = ?", (chat_id,)).fetchone()
+def start(update: Update, context: CallbackContext) -> None:
+    user_instance = context.user_data['user_instance']
 
-        if player_profile is None:
-            db.execute("BEGIN TRANSACTION")
-            db_insert = [chat_id, telegram_user]
-            db.execute("INSERT INTO players(id, telegram_user) VALUES (?, ?)", db_insert)
-
-            # insert into access control
-            db_insert = [chat_id, 0]
-            db.execute("INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", db_insert)
-            db.commit()
-
-            return None
-
+    if user_instance.retrieve_user_data() is None:
+        return None
     context.bot.send_message(
-            chat_id=chat_id,
+            chat_id=user_instance.id,
             text="Hello please use the commands to talk to me!"
             )
     return None
 
+
 @secure(access=5)
 @send_typing_action
-def choosing_date(update:Update, context:CallbackContext) -> int:
+def choosing_date(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
+    user_instance = UserManager(user)
+
     logger.info("user %s is choosing date...", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? ORDER BY id", (date.today().strftime('%Y%m%d%H%M'), )).fetchall()
+
+    event_data = user_instance.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
@@ -122,7 +110,7 @@ def choosing_date(update:Update, context:CallbackContext) -> int:
         update.message.reply_text("There are no more further planned events. Please add a new one using!/event_administration")
         return ConversationHandler.END 
 
-    update.message.reply_text( 
+    update.message.reply_text(
             text="Choose event:",
             reply_markup=reply_markup
             )
@@ -140,6 +128,7 @@ def page_change(update: Update, context: CallbackContext) -> int:
             )
     return 1
 
+
 def reply_attendance_list(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
@@ -147,53 +136,30 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
         text="generating attendance list..."
         )
 
-    #retrieve selected event
+    # retrieve selected event
     event_id = int(query.data)
+    event_instance = AdminEventManager(event_id)
+    male_records, female_records, absentees, unindicated = event_instance.curate_attendance(attach_usernames=True)
+    total_attendees = len(male_records) + len(female_records)
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
+    pretty_event_date = event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')
 
-        with open(os.path.join('resources','saved_sql_queries', 'available_attendance.sql')) as f:
-            sql_query = f.read()
-            player_data = db.execute(sql_query,(event_id, )).fetchall()
-            player_data = helpers.sql_to_dict(player_data)
-
-        with open(os.path.join('resources', 'saved_sql_queries', 'unindicated_players.sql')) as f:
-            sql_query = f.read()
-            unindicated_data = db.execute(sql_query, (event_id,)).fetchall()
-
-        event = db.execute("SELECT * FROM events WHERE id = ?", (event_id, )).fetchone()
-
-    attending_boys = ""
-    for player in player_data['attending_boys']:
-        attending_boys += player + "\n"
-    attending_girls = ''
-    for player in player_data['attending_girls']:
-        attending_girls += player + "\n"
-    absent = ''
-    for player in player_data['absent']:
-        absent += player + "\n"
-    unindicated = ''
-    for row in unindicated_data:
-        if not row['telegram_user']:
-            telegram_user_name = "privated"
-        else:
-            telegram_user_name = f"@{row['telegram_user']}"
-        unindicated += row['name'] + " - " + telegram_user_name + '\n'
-
+    sep = '\n'
 
     text = f"""
-Attendance for <b>{event['event_type']}</b> on <u>{event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')}</u> : {len(player_data['attending_boys']) + len(player_data['attending_girls'])}
+Attendance for <b>{event_instance.event_type}</b> on <u>{pretty_event_date}</u> : {total_attendees}
 
-Attending boys: {len(player_data['attending_boys'])}
-{attending_boys}
-Attending girls: {len(player_data['attending_girls'])}
-{attending_girls}
-Absent: {len(player_data['absent'])}
-{absent}
-Not Indicated: {len(unindicated_data)}
-{unindicated}
+Attending boys: {len(male_records)}
+{sep.join(male_records)}
 
+Attending girls: {len(female_records)}
+{sep.join(female_records)}
+
+Absent: {len(absentees)}
+{sep.join(absentees)}
+
+Not Indicated: {len(unindicated)}
+{sep.join(unindicated)}
     """
     query.edit_message_text(text=text, parse_mode='html')
     user = update.effective_user
@@ -205,9 +171,14 @@ Not Indicated: {len(unindicated_data)}
 @send_typing_action
 def announce_all(update:Update, context: CallbackContext) -> int:
     logger.info("User %s initiated process: announce all", update.effective_user.first_name)
-    #conversation state
+    user = update.effective_user
+
+    user_instance = AdminUser(user)
+
+    # conversation state
     conv_state = 0
     context.user_data['conv_state'] = conv_state
+    context.user_data['user_instance'] = user_instance
 
     update.message.reply_text(
             f'You will be sending an annoucement to all active players in {CONFIG["team_name"]} through {CONFIG["training_bot_name"]}. '
@@ -218,23 +189,25 @@ def announce_all(update:Update, context: CallbackContext) -> int:
     context.user_data['conv_state'] += 1
     return context.user_data['conv_state']
 
+
 @send_typing_action
-def confirm_message(update:Update, context: CallbackContext) -> int:
+def confirm_message(update: Update, context: CallbackContext) -> int:
     buttons = [
             [InlineKeyboardButton(text="Confirm", callback_data="forward")],
             [InlineKeyboardButton(text="Edit Message", callback_data="back")]
             ]
 
-    #getting announcement message and entities, then storing
+    # getting announcement message and entities, then storing
     announcement = update.message.text
     announcement_entities = update.message.entities
     context.user_data['announcement'] = announcement
     context.user_data['announcement_entities'] = announcement_entities
+
     bot_message = update.message.reply_text(
             'You have sent me: \n\n',
             )
     update.message.reply_text(
-            text=announcement ,
+            text=announcement,
             entities=announcement_entities
             )
     update.message.reply_text(
@@ -245,8 +218,9 @@ def confirm_message(update:Update, context: CallbackContext) -> int:
     context.user_data['conv_state'] += 1
     return context.user_data['conv_state']
 
+
 @send_typing_action
-def edit_msg(update:Update, context:CallbackContext) -> int:
+def edit_msg(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     query.edit_message_text(
@@ -257,21 +231,18 @@ def edit_msg(update:Update, context:CallbackContext) -> int:
     return context.user_data['conv_state']
 
 
-def write_message(update:Update, context:CallbackContext) -> int:
+def write_message(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
-    
+
     event_id = int(query.data)
-    event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
-    with sqlite3.connect(CONFIG['database']) as db:
-        event_type = db.execute("SELECT event_type FROM events WHERE id = ?", (event_id, )).fetchone()[0]
+    e = AdminEventManager(event_id)
+    context.user_data['event_instance'] = e
+    pretty_date = e.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
+
     
-     
-    context.user_data['event_date'] = event_date
-    context.user_data['event_id'] = event_id
-    context.user_data['event_type'] = event_type
     query.edit_message_text(
-            f"You have choosen <u>{event_type}</u> on <u>{event_date.strftime('%d-%b, %a @ %-I:%M%p')}</u>.\n\n"
+            f"You have choosen <u>{e.event_type}</u> on <u>{pretty_date}</u>.\n\n"
             "Write your message to players who are <u>attending</u> and <u>active players who have not indicated</u> attendance here. "
             "If you have choosen an earlier date, you can send <b>training summaries</b> to players who attended too!",
             parse_mode="HTML"
@@ -281,31 +252,31 @@ def write_message(update:Update, context:CallbackContext) -> int:
 
 
 @send_typing_action
-def send_event_message(update:Update, context: CallbackContext) -> int:
+def send_event_message(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
+    user_instance = AdminUser(user)
     query = update.callback_query
     query.answer()
-    #getting relevant data
-    event_id = context.user_data['event_id']
-    event_date = context.user_data['event_date']
-    event_type = context.user_data['event_type']
 
-    attached_str = event_type + ' on ' + event_date.strftime('%d-%b, %a @ %-I:%M%p')
-    comment = f"Message for {attached_str}"
+    # getting relevant data
+    event = context.user_data['event_instance']
+    event.generate_entities()
+    announcement = context.user_data['announcement']
+    msg_entities = context.user_data['announcement_entities']
+
+    footer = event.event_type + ' on ' + event.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
+    footer = f"Message for {footer}"
+    msg_entities.append(
+            MessageEntity(
+                type="italic",
+                offset=len(announcement) + 2,
+                length=len(footer)
+                )
+            )
 
     admin_msg=query.edit_message_text(
                 "saving event announcement...\n"
                 )
-    msg = f"{context.user_data['announcement']}\n\n{comment}\n\n- @{user.username}"
-    msg_entities = context.user_data['announcement_entities']
-    msg_entities.append(
-            MessageEntity(
-                type="italic",
-                offset=len(context.user_data['announcement']) + 2,
-                length=len(comment)
-                )
-            )
-
     with sqlite3.connect(CONFIG['database']) as db:
         db.execute('BEGIN TRANSACTION')
         entity_data = list()
@@ -377,107 +348,82 @@ def send_event_message(update:Update, context: CallbackContext) -> int:
     logger.info("User %s sucessfully sent event messages", user.first_name)
     return ConversationHandler.END
 
+
 @send_typing_action
-def send_message(update:Update, context:CallbackContext) -> None:
+def send_message(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
     user = update.effective_user
-    msg = context.user_data['announcement'] + f"\n\n\n\n- @{update.effective_user.username}"
-    msg_entities= context.user_data['announcement_entities']
+    user_instance = AdminUser(user)
 
-    #query data
+    msg = context.user_data['announcement'] + f"\n\n\n\n- @{update.effective_user.username}"
+    msg_entities = context.user_data['announcement_entities']
+
+    # query data
     admin_msg_text = "getting active players..."
     admin_msg = query.edit_message_text(text=admin_msg_text)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        with open(os.path.join('resources', 'saved_sql_queries', 'club_members.sql')) as f:
-            sql = f.read()
-        active_players = db.execute(sql).fetchall()
-        hidden_players = db.execute('SELECT * FROM players WHERE hidden = 1').fetchall()
 
+    send_list = user_instance.get_users_list(
+            only_active=True, only_members=True)
 
-    admin_msg_text +="done.\nSending announcements... 0/{len(active_players)}"
-    send_message_generator = helpers.mass_send(
-            msg=msg,
-            send_list=active_players,
-            entities=msg_entities,
-            development=CONFIG['development']
-            )
-    failed_send_list = ''
-    for i in range(len(active_players)):
-        failed_send_user = next(send_message_generator)
-        if failed_send_user != "":
-            failed_send_list += "@" + failed_send_user + ', '
-        admin_msg.edit_text(f"Sending announcements... {i+1}/{len(active_players)}")
+    send_message_generator = user_instance.send_message_by_list(
+            send_list=send_list, msg=msg, msg_entities=msg_entities, pin=True)
 
-    send_message_generator = helpers.mass_send(
-            msg=msg,
-            send_list=hidden_players,
-            entities=msg_entities,
-            development=CONFIG['development']
-            )
-    for row in hidden_players:
-        next(send_message_generator)
+    failed_list = list()
+    for i in range(len(send_list)):
+        admin_msg.edit_text(f"Sending announcements... {i}/{len(send_list)}")
 
+        outcome = next(send_message_generator)
+        if outcome != 'success':
+            failed_list.append(outcome)
+
+    failed_users = ", ".join(failed_list)
     admin_msg.edit_text(
-            "Sending announcements complete. list of uncompleted sends: \n\n" #+ failed_send_list,
-            )
+            f"Sending announcements complete. list of uncompleted sends: \n\n {failed_users}")
 
     logger.info("User %s sucessfully sent announcements", user.first_name)
     return ConversationHandler.END
 
+
 def send_reminders(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
+    user = update.effective_user
+    user_instance = AdminUser(user)
+
     query.edit_message_text(
             text="getting active_players..."
             )
 
     event_id = int(query.data)
-    event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
- 
-    #getting unindicated data
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        with open(os.path.join('resources', "saved_sql_queries", 'unindicated_players.sql')) as f:
-            sql_query = f.read()
-            unindicated_data = db.execute(sql_query, (event_id, )).fetchall()
-            event_type = db.execute('SELECT event_type FROM events WHERE id = ?', (event_id, )).fetchone()
+    event_instance = AdminEventManager(event_id)
 
+    e_details = event_instance.event_date.strftime('%d-%b-%y, %A')
+    e_details += f" ({event_instance.event_type})"
+    msg = user_instance.read_msg_from_file(e_details)
 
-    #parsing message from file
-    query.edit_message_text(
-            text="Parsing gsheets... done.\nCrafting reminder message...\n"
+    unindicated_players = event_instance.unindicated_members(event_id)
+
+    send_message_generator = user_instance.send_message_by_list(
+            unindicated_players, msg=msg, parse_mode='HTML'
             )
-    attached_str = event_date.strftime('%d-%b-%y, %A') + ' (' + event_type["event_type"] + ')'
-    remind_msg = helpers.read_msg_from_file(os.path.join("resources", 'messages', 'not_indicated.txt'), attached_str)
 
+    failed_sends = list()
+    for i in range(len(unindicated_players)):
+        query.edit_message_text(f"sending reminders {i}/{len(unindicated_players)}")
+
+        outcome = next(send_message_generator)
+        if outcome != 'success':
+            failed_sends.append(outcome)
+
+    unsent_users = ', '.join(failed_sends)
     query.edit_message_text(
-            text=f"Parsing gsheets... done.\nCrafting reminder message... done.\nSending messages... 0/{len(unindicated_data)}\n"
-            )
-    send_message_generator = helpers.mass_send(
-            msg=remind_msg,
-            send_list=unindicated_data,
-            parse_mode='HTML',
-            pin_message=False,
-            development=CONFIG['development']
-            )
-    unsent_names = ''
-    for i, _ in enumerate(unindicated_data):
-        unsent_name = next(send_message_generator)
-        if unsent_name != "":
-            unsent_names += ' @' + unsent_name +","
-        query.edit_message_text(
-                text=f"Parsing gsheets... done.\nCrafting reminder message... done.\nSending messages... {i + 1}/{len(unindicated_data)}\n"
-                )
-
-
-    query.edit_message_text(
-            text=f"Reminders have been sent sucessfully for {attached_str}\n\nUnsucessful sends: \n{unsent_names}"
+            text=f"Reminders have been sent sucessfully for {e_details}\n\nUnsucessful sends: \n{unsent_users}"
             )
 
     logger.info("reminders sent successfuly by User %s", update.effective_user.first_name)
     return ConversationHandler.END
+
 
 @secure(access=5)
 @send_typing_action

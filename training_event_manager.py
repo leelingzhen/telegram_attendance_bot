@@ -105,7 +105,7 @@ class TrainingEventManager:
         self.end_time = datetime.strptime(event["end_time"], "%H:%M")
         self.location = event["location"]
         self.announcement = event["announcement"]
-        self.announcement_entities = self.generate_entities()
+        self.announcement_entities = None
         self.access_control = event["access_control"]
 
     def generate_entities(self):
@@ -115,8 +115,12 @@ class TrainingEventManager:
             db.row_factory = sqlite3.Row
 
             data = db.execute(
-                "SELECT * FROM announcement_entities WHERE event_id = ?", (self.id, )
+                "SELECT * FROM announcement_entities WHERE event_id = ?", (
+                    self.id, )
             ).fetchall()
+
+            if data is None:
+                return None
 
             for entity in data:
                 entities.append(
@@ -126,7 +130,17 @@ class TrainingEventManager:
                         length=entity['entity_length']
                     )
                 )
+        self.announcement_entities = entities
         return entities
+
+
+        def update_entities(self):
+            if self.announcement_entities is None:
+                res = self.generate_entities()
+
+            if res is None:
+
+
 
     def pretty_start(self) -> str:
         return self.start_time.strftime("%-I:%M%p")
@@ -225,7 +239,7 @@ class TrainingEventManager:
                        """, (event_id, attendance, gender,)).fetchall()
         return player_data
 
-    def unindicated_members(self, event_id: int = None):
+    def unindicated_members(self, event_id: int = None) -> sqlite3.Row:
         if event_id is None:
             event_id = self.id
         with sqlite3.connect(CONFIG['database']) as db:
@@ -286,7 +300,7 @@ class TrainingEventManager:
 
         return formatted_attendance
 
-    def curate_attendance(self, attach_usernames: int = True) -> list:
+    def curate_attendance(self, attach_usernames: int = True) -> tuple:
         """
         queries all the attendance for the said event
         attach_usernames will attach user names to uninidcaited players
@@ -314,6 +328,8 @@ class TrainingEventManager:
 
         absentees = self.attendance_of_members(attendance=0, gender="Male")
         absentees += self.attendance_of_members(attendance=0, gender="Female")
+        absentees += self.attendance_of_guests(attendance=0, gender="Male")
+        absentees += self.attendance_of_guests(attendance=0, gender="Female")
 
         absentees = self.attendance_to_str(absentees)
 
@@ -322,3 +338,8 @@ class TrainingEventManager:
             unindicated, attach_usernames=attach_usernames)
 
         return male_records, female_records, absentees, unindicated
+
+
+class AdminEventManager(TrainingEventManager):
+    def __init__(self, id):
+        super().__init__(id)

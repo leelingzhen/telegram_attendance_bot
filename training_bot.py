@@ -58,10 +58,9 @@ def secure(access=2):
         @wraps(func)
         def wrapped(update, context, *args, **kwargs):
             user = update.effective_user
-            with sqlite3.connect(CONFIG["database"]) as db:
-                db.row_factory = lambda cursor, row: row[0]
-                user_clearance = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id,)).fetchone()
-            if user_clearance < access:
+            user_instance = UserManager(user)
+            context.user_data['user_instance'] = user_instance
+            if user_instance.access < access:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
                 update.message.reply_text(
                         text='you do not have access to this function, please contact adminstrators'
@@ -321,6 +320,8 @@ Attendance: {'Yes' if attendance.status else 'No'}
     if helpers.resend_announcement(prev_status,
                                    event_instance.announcement,
                                    user_instance.access):
+
+        event_instance.generate_entities()
         message_obj = context.bot.send_message(
                 chat_id=user_instance.id,
                 text=event_instance.announcement,
@@ -342,13 +343,16 @@ def choosing_more_dates(update:Update, context: CallbackContext)-> int:
     user = update.effective_user
     helpers.refresh_player_profiles(update, context)
 
+    user_instance = UserManager(user)
+
     logger.info("user %s used /attendance_plus...", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ?", (date.today().strftime('%Y%m%d%H%M'),)).fetchall()
+
+    event_data = user_instance.get_event_dates()
 
     context.user_data["event_data"] = event_data
     context.user_data["chosen_events"] = list()
+    context.user_data['user_instance'] = user_instance
+
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
@@ -410,12 +414,14 @@ Selected Dates:
 
     return 1
 
+
 def indicate_more(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
     # initialise status
-    context.user_data["status"] = -1
+    context.user_data["gave_reason"] = False
+    context.user_data['status'] = None
 
     buttons = [
             [InlineKeyboardButton(text="Yes", callback_data="1")],
@@ -437,6 +443,7 @@ def give_reason_more(update: Update, context: CallbackContext) -> int:
 
     # save the query
     context.user_data["status"] = int(query.data)
+    context.user_data["gave_reason"] = True
 
     query.edit_message_text(
             text="Please write a comment/reason 😏. The comment will be applied to all selected events."
@@ -448,11 +455,19 @@ def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
     # retrieve indication of attendance
     user = update.effective_user
     status = context.user_data["status"]
+    gave_reason = context.user_data["gave_reason"]
+    user_instance = context.user_data["user_instance"]
 
     text = "updating your attendance..."
 
-    if status == -1:
+    if gave_reason:
         # indicated attendance is yes skipped give_reason_more
+        reason = update.message.text
+        reason = helpers.escape_html_tags(reason)
+        bot_message = update.message.reply_text(
+                text=text
+                )
+    else:
         query = update.callback_query
         query.answer()
         status = 1
@@ -460,51 +475,33 @@ def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
         bot_message = query.edit_message_text(
                 text=text
                 )
-    else:
-        # retrieve reasons, went through give_reason
-        reason = update.message.text
-        bot_message = update.message.reply_text(
-                text=text
-                )
+
     # retrieve selected events
     chosen_events = context.user_data['chosen_events']
 
-    # retrieve from database
-    with sqlite3.connect(CONFIG['database']) as db:
-        # retrieve existing data that has already been indicated 
-        data = (user.id, date.today().strftime("%Y%m%d%H%M"))
-        existing_events = db.execute("SELECT event_id FROM attendance WHERE player_id = ? AND event_id >= ?", data).fetchall()
-        existing_events = list(sum(existing_events, ()))
-        intersect_events = set(chosen_events).intersection(existing_events)
+    date_strs = list()
 
-        # add to database
-        db.execute("BEGIN TRANSACTION")
-
-        # first update existing records
-        if len(intersect_events) != 0: 
-            data = [(status, reason, event_id, user.id) for event_id in intersect_events]
-            db.executemany("UPDATE attendance SET status = ?, reason =? WHERE event_id = ? AND player_id = ?", data)
-
-        # get events which are not in record yet
-        remaining_chosen_events = set(chosen_events) - intersect_events
-        if len(remaining_chosen_events) != 0:
-            data = [(event_id, user.id, status, reason) for event_id in remaining_chosen_events]
-            db.executemany("INSERT INTO attendance VALUES (?, ?, ?, ?)", data)
-        db.commit()
-
-    chosen_events_str = ""
     for event_id in chosen_events:
-        chosen_events_str += "    " + datetime.strptime(str(event_id), '%Y%m%d%H%M').strftime('%-d-%b-%-y, %a @ %-I:%M%p') + "\n"
+        event = TrainingEventManager(event_id)
+        attendance = AttendanceManager(user_instance.id, event.id)
+        attendance.set_status(status)
+        attendance.set_reason(reason)
+        attendance.update_records()
+        event_date = event.get_event_date()
+        pretty_str = event_date.strftime('%-d %b, %a @ %-I:%M%p')
+        pretty_str = f"{pretty_str} ({event.event_type})"
 
+        date_strs.append(pretty_str)
+
+    sep = '\n'
     text = f"""
 You have sucessfully updated your attendance for {len(chosen_events)} records!
 
-{chosen_events_str}
-    Attendance : {"Yes" if status == 1 else "No"}
+{sep.join(date_strs)}
 
-    {'Comment/reason: ' + reason if reason != '' else ''}
-
-    """
+Attendance : {"Yes" if status == 1 else "No"}
+{'Comment/reason: ' + reason if reason != '' else ''}
+"""
 
     bot_message.edit_text(text=text)
     logger.info("user %s has sucessfully updated attendance for %d records", user.first_name, len(chosen_events))
@@ -811,7 +808,7 @@ def confirm_name_registration(update:Update, context:CallbackContext) ->int:
     return 3
 
 
-def commit_registration(update:Update, context:CallbackContext) -> int:
+def commit_registration(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     user = update.effective_user
@@ -913,9 +910,10 @@ def cancel(update:Update, context: CallbackContext) -> int:
     logger.info('user %s just cancelled a process', user.first_name)
     return ConversationHandler.END
 
+
 def main():
     with open(os.path.join(".secrets", "bot_credentials.json"), "r") as f:
-            bot_tokens = json.load(f)
+        bot_tokens = json.load(f)
 
     if CONFIG["development"]:
         token = bot_tokens["dev_bot"]
