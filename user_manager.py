@@ -100,8 +100,6 @@ class UserManager:
         """
         get the list of dates from a date
         from_date :datetime.date
-
-
         """
         if from_date == 0:
             from_date = date.today()
@@ -228,6 +226,11 @@ class AdminUser(UserManager):
             return message_object
 
     def pin_message(self, chat_id, message_object):
+        """
+        pin messages after they are sent,
+        chat_id refers to the user to send to
+        message_object is the messsage object to be pinned in chat
+        """
         bot_messenger = Bot(token=self.bot_token)
         bot_messenger.pin_chat_message(
             chat_id=chat_id,
@@ -242,6 +245,16 @@ class AdminUser(UserManager):
                              pin: bool = False,
                              parse_mode=None
                              ):
+        """
+        used to mass send multiple messages,
+        send list is a list of event ids
+        msg will be a plain text string
+        msg_entities are used for markdown text in telegram.Message object
+        pin = True will pin messages after they are being sent
+        parse_mode type of markdown used, options are 'html' 'markdown'
+        parse_mode will be ignored if msg_entities is not None
+
+        """
 
         for row in send_list:
             telegram_user = f"@{row['telegram_user']}"
@@ -261,9 +274,11 @@ class AdminUser(UserManager):
             yield telegram_user
 
     def read_msg_from_file(self, date_str: str) -> str:
+        """
+        reads strings from a txt file
+        date_string: text to be replaced in the txt file
+        """
         filename = os.path.join("resources", 'messages', 'not_indicated.txt')
         with open(filename, "r", encoding="utf-8") as text_f:
             msg = text_f.read().replace("{date}", date_str).rstrip()
         return msg
-
-

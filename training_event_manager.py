@@ -231,6 +231,9 @@ class TrainingEventManager:
         return player_data
 
     def unindicated_members(self, event_id: int = None) -> sqlite3.Row:
+        """
+        returns a list of unindicated members 
+        """
         if event_id is None:
             event_id = self.id
         with sqlite3.connect(CONFIG['database']) as db:
