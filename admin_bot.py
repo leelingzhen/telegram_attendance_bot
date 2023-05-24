@@ -266,6 +266,8 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
 
     footer = event.event_type + ' on ' + event.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
     footer = f"Message for {footer}"
+
+
     msg_entities.append(
             MessageEntity(
                 type="italic",
@@ -273,8 +275,9 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
                 length=len(footer)
                 )
             )
+    announcement = f"{announcement}\n\n{footer}\n\n- @{user_instance.username}"
 
-    admin_msg=query.edit_message_text(
+    admin_msg = query.edit_message_text(
                 "saving event announcement...\n"
                 )
 
