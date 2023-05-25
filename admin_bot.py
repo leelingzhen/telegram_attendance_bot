@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 
 from user_manager import UserManager, AdminUser
-from training_event_manager import AdminEventManager, AttendanceManager
+from event_manager import AdminEventManager, AttendanceManager
 
 from telegram import (
         Update,

@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date, datetime
 from functools import wraps
 from user_manager import UserManager
-from training_event_manager import TrainingEventManager, AttendanceManager
+from event_manager import TrainingEventManager, AttendanceManager
 
 from telegram import (
         Update,
