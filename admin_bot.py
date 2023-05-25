@@ -33,7 +33,7 @@ with open("config.json") as f:
     CONFIG = json.load(f)
     db = sqlite3.connect(CONFIG['database'], check_same_thread=False)
 
-#enable logging
+# enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
@@ -116,6 +116,7 @@ def choosing_date(update: Update, context: CallbackContext) -> int:
             )
     return 1
 
+
 def page_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
@@ -167,9 +168,10 @@ Not Indicated: {len(unindicated)}
 
     return ConversationHandler.END
 
+
 @secure(access=5)
 @send_typing_action
-def announce_all(update:Update, context: CallbackContext) -> int:
+def announce_all(update: Update, context: CallbackContext) -> int:
     logger.info("User %s initiated process: announce all", update.effective_user.first_name)
     user = update.effective_user
 
@@ -240,7 +242,6 @@ def write_message(update: Update, context: CallbackContext) -> int:
     context.user_data['event_instance'] = e
     pretty_date = e.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
 
-    
     query.edit_message_text(
             f"You have choosen <u>{e.event_type}</u> on <u>{pretty_date}</u>.\n\n"
             "Write your message to players who are <u>attending</u> and <u>active players who have not indicated</u> attendance here. "
@@ -267,7 +268,6 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
     footer = event.event_type + ' on ' + event.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
     footer = f"Message for {footer}"
 
-
     msg_entities.append(
             MessageEntity(
                 type="italic",
@@ -281,9 +281,10 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
                 "saving event announcement...\n"
                 )
 
-    event.update_announcement_entities(
-            msg=announcement, entity_data=msg_entities
-            )
+    event.set_announcement(announcement)
+    event.set_entities(msg_entities)
+    event.push_event_announcement()
+    event.push_announcement_entities()
 
     admin_msg.edit_text(
         "getting players...\n"
@@ -403,7 +404,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
 
 @secure(access=5)
 @send_typing_action
-def choosing_date_administration(update:Update, context:CallbackContext) -> int:
+def choosing_date_administration(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     logger.info("user %s has started /event_adminstration...", user.first_name)
     with sqlite3.connect(CONFIG['database']) as db:
