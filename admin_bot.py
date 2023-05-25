@@ -108,7 +108,7 @@ def choosing_date(update: Update, context: CallbackContext) -> int:
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Please add a new one using!/event_administration")
-        return ConversationHandler.END 
+        return ConversationHandler.END
 
     update.message.reply_text(
             text="Choose event:",
@@ -138,7 +138,7 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
 
     # retrieve selected event
     event_id = int(query.data)
-    event_instance = AdminEventManager(event_id)
+    event_instance = AdminEventManager(event_id, record_exists=True)
     male_records, female_records, absentees, unindicated = event_instance.curate_attendance(attach_usernames=True)
     total_attendees = len(male_records) + len(female_records)
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
@@ -236,7 +236,7 @@ def write_message(update: Update, context: CallbackContext) -> int:
     query.answer()
 
     event_id = int(query.data)
-    e = AdminEventManager(event_id)
+    e = AdminEventManager(event_id, record_exists=True)
     context.user_data['event_instance'] = e
     pretty_date = e.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
 
@@ -372,7 +372,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
             )
 
     event_id = int(query.data)
-    event_instance = AdminEventManager(event_id)
+    event_instance = AdminEventManager(event_id, record_exists=True)
 
     e_details = event_instance.event_date.strftime('%d-%b-%y, %A')
     e_details += f" ({event_instance.event_type})"
@@ -749,7 +749,7 @@ def commit_event_changes(update:Update, context:CallbackContext) -> str:
 
             query.edit_message_text('creating new event...')
             data = [
-                            event_data['id'], 
+                            event_data['id'],
                             event_data['event_type'],
                             event_data['event_date'],
                             event_data['start_time'],
@@ -1187,16 +1187,16 @@ def main():
     conv_handler_event_administration = ConversationHandler(
             entry_points=[CommandHandler('event_administration', choosing_date_administration)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(initialise_event_date, pattern="^(\d{10}|\d{12})$"),
                     CallbackQueryHandler(initialise_event_date, pattern="add"),
                     ],
-                2 : [
+                2: [
                     CallbackQueryHandler(first_event_menu, pattern="^edit$"),
                     CallbackQueryHandler(delete_event, pattern="^remove$"),
                     MessageHandler(Filters.text & ~Filters.command ,first_event_menu)
                     ],
-                3:[
+                3: [
                     CallbackQueryHandler(change_datetime, pattern="^start$"),
                     CallbackQueryHandler(change_time, pattern='^end_time$'),
                     CallbackQueryHandler(edit_type, pattern='^type$'),
@@ -1204,7 +1204,7 @@ def main():
                     CallbackQueryHandler(edit_access, pattern='^access$'),
                     CallbackQueryHandler(commit_event_changes, pattern='^forward$'),
                     ],
-                'event_menu' : [
+                'event_menu': [
                     CallbackQueryHandler(event_menu),
                     MessageHandler(Filters.regex('^([1-9]|([012][0-9])|(3[01]))-([0]{0,1}[1-9]|1[012])-\d\d\d\d@([0-1]?[0-9]|2?[0-3])([0-5]\d)$'), event_menu),
                     MessageHandler(Filters.regex('^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$'), event_menu),

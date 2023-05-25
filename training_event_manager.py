@@ -3,7 +3,7 @@ import os
 import logging
 import json
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from telegram import MessageEntity
 
 
@@ -91,22 +91,45 @@ class AttendanceManager:
             db.commit()
 
 
-class TrainingEventManager:
-    def __init__(self, id):
+class EventManager:
+    def __init__(self, event_id: int, record_exist=False):
+        self.id = event_id
+        self.record_exist = record_exist
+
+        self.event_date = None
+        self.start_time = None
+        self.end_time = None  # event end timing, type datetime
+        self.event_type = None  # type str
+        self.location = None  # type str
+        self.announcement = None  # str
+        self.announcement_entities = None  # list of telegram.Message
+        self.access_control = None  # type int
+
+    def parse_event_date(self, duration: int):
+        string_id = str(self.id)
+        event_date = datetime.strptime(string_id, '%Y%m%d%H%M')
+        self.event_date = event_date
+        self.start_time = event_date
+        self.end_time = event_date + timedelta(hours=duration)
+        return event_date
+
+    def set_id(self, id):
         self.id = id
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event = db.execute(
-                "SELECT * FROM events WHERE id = ?", (id, )).fetchone()
-        self.event_type = event["event_type"]
-        self.event_date = datetime.strptime(event["event_date"], "%Y-%m-%d")
-        self.start_time = datetime.strptime(event["start_time"], "%H:%M")
-        self.end_time = datetime.strptime(event["end_time"], "%H:%M")
-        self.location = event["location"]
-        self.announcement = event["announcement"]
-        self.announcement_entities = None
-        self.access_control = event["access_control"]
+    def set_event_end(self, event_end: datetime):
+        self.event_end = event_end
+
+    def set_event_type(self, event_type: str):
+        self.event_type = event_type
+
+    def set_location(self, location: str):
+        self.location = location
+
+    def set_announcement(self, announcement: str):
+        self.announcement = announcement
+
+    def set_access(self, access: int):
+        self.access_control = access
 
     def generate_entities(self):
         entities = list()
@@ -132,6 +155,52 @@ class TrainingEventManager:
                 )
         self.announcement_entities = entities
         return entities
+
+    def pull_event(self):
+        """
+        get the event from db
+        schema of query:
+            CREATE TABLE events(
+                id LONGINT,
+                event_type TEXT,
+                event_date DATE,
+                start_time TIME,
+                end_time TIME DEFAULT '00:00',
+                location TEXT,
+                announcement TEXT,
+                access_control INT DEFAULT 2,
+                PRIMARY KEY(id)
+
+        returns: bool = True if record exists
+        """
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+            data = db.execute(
+                "SELECT * FROM events WHERE id = ?", (self.id, )).fetchone()
+            if data is None:
+                self.record_exist = False
+                return False
+
+            # event end timing, type datetime
+            self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
+            self.start_time = datetime.strptime(data["start_time"], "%H:%M")
+            self.end_time = datetime.strptime(data["end_time"], "%H:%M")
+            self.event_type = data["event_type"]
+            self.announcement = data["announcement"]  # str
+            self.location = data["location"]
+            self.announcement_entities = None  # list of telegram.Message
+            self.access_control = data["access_control"]  # type int
+
+            self.record_exist = True
+            return True
+
+
+class TrainingEventManager(EventManager):
+    def __init__(self, event_id, record_exists=True):
+
+        EventManager.__init__(self, event_id)
+        self.pull_event()
+        self.generate_entities()
 
     def pretty_start(self) -> str:
         return self.start_time.strftime("%-I:%M%p")
@@ -334,10 +403,12 @@ class TrainingEventManager:
         return male_records, female_records, absentees, unindicated
 
 
-class AdminEventManager(TrainingEventManager):
-    def __init__(self, id, exists=True):
-        super().__init__(id)
-        self.exists = exists
+class AdminEventManager(TrainingEventManager, EventManager):
+    def __init__(self, id, record_exists=False):
+        if record_exists:
+            TrainingEventManager.__init__(self, id, record_exists)
+        else:
+            EventManager.__init__(self, id, record_exists)
 
     def update_announcement_entities(self, msg, entity_data=None):
 
@@ -355,12 +426,12 @@ class AdminEventManager(TrainingEventManager):
         with sqlite3.connect(CONFIG['database']) as db:
             db.row_factory = sqlite3.Row
 
-            db.execute("DELETE FROM announcement_entities WHERE event_id = ?", (self.id, ))
+            db.execute(
+                "DELETE FROM announcement_entities WHERE event_id = ?", (self.id, ))
 
             if new_entity_data:
-                db.executemany("INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", new_entity_data)
-            db.execute('UPDATE events SET announcement = ? WHERE id = ?', (msg, self.id))
+                db.executemany(
+                    "INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", new_entity_data)
+            db.execute(
+                'UPDATE events SET announcement = ? WHERE id = ?', (msg, self.id))
             db.commit()
-
-
- 
