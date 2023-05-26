@@ -31,7 +31,7 @@ class AttendanceManager:
         self.reason = ""
 
         with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
+            db.row_factory = sqlite3.row
             data = db.execute(
                 "SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?",
                 (event_id, player_id)).fetchone()
@@ -128,11 +128,51 @@ class EventManager:
         self.end_time = event_date + timedelta(hours=duration)
         return event_date
 
-    def set_id(self, id):
+    def print(self):
+        print(self.id)
+        print(self.record_exist)
+        print(self.event_date)
+        print(self.start_time)
+        print(self.end_time)  # event end timing, type datetime
+        print(self.event_type)  # type str
+        print(self.location)  # type str
+        print(self.announcement)  # str
+        print(self.announcement_entities)  # list of telegram.Message
+        print(self.access_control)  # type int
+
+    def set_id(self,
+               id: int = None,
+               event_date=None):
+        """
+        set the id based on a datetime object or int
+        only use either of the args
+        """
+        if id and event_date:
+            raise "Only use one of the fields"
+        if event_date:
+            id = event_date.strftime("%Y%m%d%H%M")
         self.id = id
 
+    def set_event_date(self, event_date: datetime):
+        """
+        sets both event_date and startime fields
+        """
+        self.event_date = event_date
+        self.start_time = event_date
+
+    def replace_end_time(self, end_time: datetime):
+        """
+        used to fill event_end
+        """
+        event_date = self.event_date
+        event_date = event_date.replace(
+                hour=end_time.hour,
+                minute=end_time.minute
+                )
+        return event_date
+
     def set_event_end(self, event_end: datetime):
-        self.event_end = event_end
+        self.end_time = event_end
 
     def set_event_type(self, event_type: str):
         self.event_type = event_type
@@ -207,7 +247,18 @@ class EventManager:
             self.access_control = data["access_control"]  # type int
 
             self.record_exist = True
+            self.correct_event_date()
             return True
+
+    def correct_event_date(self):
+        event_date = self.event_date
+        event_date = event_date.replace(
+            hour=self.start_time.hour,
+            minute=self.start_time.minute
+            )
+        self.event_date = event_date
+        self.start_time = event_date
+
 
 
 class TrainingEventManager(EventManager):
@@ -221,9 +272,9 @@ class TrainingEventManager(EventManager):
     to this instance of the class
     """
 
-    def __init__(self, event_id, record_exists=True):
+    def __init__(self, event_id, record_exist=True):
 
-        EventManager.__init__(self, event_id)
+        EventManager.__init__(self, event_id, record_exist=record_exist)
         self.pull_event()
         self.generate_entities()
 
@@ -326,7 +377,7 @@ class TrainingEventManager(EventManager):
 
     def unindicated_members(self, event_id: int = None) -> sqlite3.Row:
         """
-        returns a list of unindicated members 
+        returns a list of unindicated members
         """
         if event_id is None:
             event_id = self.id
@@ -382,7 +433,7 @@ class TrainingEventManager(EventManager):
                 else:
                     telegram_user = f"@{record['telegram_user']}"
 
-                entry = f"{entry} - @{telegram_user}"
+                entry = f"{entry} - {telegram_user}"
 
             formatted_attendance.append(entry)
 
@@ -439,14 +490,33 @@ class AdminEventManager(TrainingEventManager, EventManager):
     can query for user attendance for an event like the TrainingEventManager
     """
 
-    def __init__(self, id, record_exists=False):
-        if record_exists:
+    def __init__(self, id, record_exist=False):
+        if record_exist:
             # parses all the fields
-            TrainingEventManager.__init__(self, id, record_exists)
+            TrainingEventManager.__init__(self, id, record_exist=record_exist)
         else:
             # keeps all the fields empty
-            EventManager.__init__(self, id, record_exists)
+            EventManager.__init__(self, id, record_exist=record_exist)
         self.original_id = self.id
+
+    def new_event_parse(self,
+                        event_type="Field Training",
+                        access_control=2
+                        ):
+        """
+        parse fields for uncreated events
+        """
+        self.parse_event_date(duration=2)
+        self.set_event_type(event_type)
+        self.set_access(access_control)
+
+    def parse_event_date(self, duration: int):
+        string_id = str(self.id)
+        event_date = datetime.strptime(string_id, '%Y%m%d%H%M')
+        self.event_date = event_date
+        self.start_time = event_date
+        self.end_time = event_date + timedelta(hours=duration)
+        return event_date
 
     def set_entities(self, entities: list):
         self.announcement_entities = entities
@@ -456,10 +526,10 @@ class AdminEventManager(TrainingEventManager, EventManager):
             self.id,
             self.event_type,
             self.event_date.strftime("%Y-%m-%d"),
-            self.event_start.strftime("%H:%M"),
-            self.event_end.strftime("%H:%M"),
+            self.start_time.strftime("%H:%M"),
+            self.end_time.strftime("%H:%M"),
             self.location,
-            self.announcment,
+            self.announcement,
             self.access_control,
             self.original_id
         ]
@@ -467,7 +537,7 @@ class AdminEventManager(TrainingEventManager, EventManager):
         with sqlite3.connect(CONFIG['database']) as db:
             # updating events table
             db.execute(
-                "UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, access_control = ? WHERE id = ?", data)
+                "UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, announcement = ?, access_control = ? WHERE id = ?", data)
 
             # updating attendance table
             db.execute(
@@ -475,15 +545,53 @@ class AdminEventManager(TrainingEventManager, EventManager):
 
             db.commit()
 
+    def check_conflicts(self):
+        """
+        before pushing updates to the db, check if
+        there are any conflicts with records
+        when inserting a new event,
+        we dont want to insert an event that already exists
+
+        when updating an event to another date,
+        we want to make sure the updated start
+        datetime does not clash with existing records
+
+        returns True if conflicts exist
+
+        """
+
+        # check conflicts when updating cur event
+        if self.record_exist and self.original_id != self.id:
+            with sqlite3.connect(CONFIG['database']) as db:
+                db.row_factory = sqlite3.Row
+
+                data = db.execute('SELECT * FROM events WHERE id = ?',
+                                  (self.id, )).fetchall()
+                if data:
+                    return True
+
+        # checking conflicts when inserting a new event
+        if not self.record_exist:
+            with sqlite3.connect(CONFIG['database']) as db:
+                db.row_factory = sqlite3.Row
+                data = db.execute('SELECT * FROM events WHERE id = ?',
+                                  (self.id, )).fetchall()
+                if data:
+                    return True
+
+        # at this time, the record exists but there is no change to the
+        # datetime, return False
+        return False
+
     def add_new_event(self):
         data = [
             self.id,
             self.event_type,
             self.event_date.strftime("%Y-%m-%d"),
-            self.event_start.strftime("%H:%M"),
-            self.event_end.strftime("%H:%M"),
+            self.start_time.strftime("%H:%M"),
+            self.end_time.strftime("%H:%M"),
             self.location,
-            self.announcment,
+            self.announcement,
             self.access_control,
         ]
         with sqlite3.connect(CONFIG['database']) as db:
@@ -501,6 +609,18 @@ class AdminEventManager(TrainingEventManager, EventManager):
             self.update_event_records()
         else:
             self.add_new_event()
+
+    def remove_event_from_record(self):
+
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.execute("BEGIN TRANSACTION")
+            db.execute("DELETE FROM events WHERE id = ?", (self.original_id, ))
+            db.execute("DELETE FROM attendance WHERE event_id = ?",
+                       (self.original_id, ))
+            db.execute(
+                "DELETE FROM announcement_entities WHERE event_id = ?",
+                (self.original_id, ))
+            db.commit()
 
     def push_announcement_entities(self):
         if not self.announcement_entities:

@@ -139,7 +139,7 @@ def reply_attendance_list(update: Update, context: CallbackContext) -> int:
 
     # retrieve selected event
     event_id = int(query.data)
-    event_instance = AdminEventManager(event_id, record_exists=True)
+    event_instance = AdminEventManager(event_id, record_exist=True)
     male_records, female_records, absentees, unindicated = event_instance.curate_attendance(attach_usernames=True)
     total_attendees = len(male_records) + len(female_records)
     event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
@@ -238,7 +238,7 @@ def write_message(update: Update, context: CallbackContext) -> int:
     query.answer()
 
     event_id = int(query.data)
-    e = AdminEventManager(event_id, record_exists=True)
+    e = AdminEventManager(event_id, record_exist=True)
     context.user_data['event_instance'] = e
     pretty_date = e.get_event_date().strftime('%d-%b, %a @ %-I:%M%p')
 
@@ -373,7 +373,7 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
             )
 
     event_id = int(query.data)
-    event_instance = AdminEventManager(event_id, record_exists=True)
+    event_instance = AdminEventManager(event_id, record_exist=True)
 
     e_details = event_instance.event_date.strftime('%d-%b-%y, %A')
     e_details += f" ({event_instance.event_type})"
@@ -406,12 +406,11 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
 @send_typing_action
 def choosing_date_administration(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    logger.info("user %s has started /event_adminstration...", user.first_name)
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT id, event_type FROM events WHERE id > ? ORDER BY id", (date.today().strftime('%Y%m%d%H%M'), )).fetchall()
+    user_instance = AdminUser(user)
 
-    context.user_data["event_data"] = event_data
+    logger.info("user %s has started /event_adminstration...", user.first_name)
+
+    event_data = user_instance.get_event_dates()
 
     buttons = helpers.date_buttons(event_data, pages=False)
     buttons.append(
@@ -422,42 +421,46 @@ def choosing_date_administration(update: Update, context: CallbackContext) -> in
 
     reply_markup = InlineKeyboardMarkup(buttons)
     # if there are no queried trainings
-
-    update.message.reply_text( 
+    update.message.reply_text(
             text="Choose event:",
             reply_markup=reply_markup
             )
     return 1
 
 
-
 @secure(access=5)
-def initialise_event_date(update:Update, context:CallbackContext)-> int:
+def initialise_event_date(update: Update, context: CallbackContext)-> int:
 
     query = update.callback_query
     query.answer()
     user = update.effective_user
 
     if query.data == "add":
-        context.user_data['event_data'] = {}
         context.user_data['event_creation'] = True
         query.edit_message_text(
-                text=f"Text me the starting datetime of the event in the format dd-mm-yyyy@HHMM\n\nEg. {datetime.now().strftime('%d-%m-%Y@%H%M')} "
+                text=f"""
+Text me the starting datetime of the event in the format
+dd-mm-yyyy@HHMM
+
+<i>Tap the example to copy the format</i>
+
+Eg. <code>{datetime.now().strftime('%d-%m-%Y@%H%M')}</code> """,
+                parse_mode='html'
                 )
         return 2
 
     else:
         context.user_data['event_creation'] = False
         event_id = int(query.data)
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event_data = db.execute('SELECT * FROM events WHERE id = ?', (event_id, )).fetchone()
-            event_data = dict(event_data)
-            context.user_data['event_data'] = event_data
+
+        event_instance = AdminEventManager(event_id, record_exist=True)
+        context.user_data['event_instance'] = event_instance
+
         buttons = [
                 [InlineKeyboardButton(text="Edit event", callback_data='edit')], 
                 [InlineKeyboardButton(text="Remove event", callback_data='remove')]
                 ]
+
         reply_markup = InlineKeyboardMarkup(buttons)
         query.edit_message_text(
                 text="What would you like to do?",
@@ -465,12 +468,14 @@ def initialise_event_date(update:Update, context:CallbackContext)-> int:
                 )
         return 2
 
+
 @secure(access=5)
 @send_typing_action
-def first_event_menu(update:Update, context:CallbackContext)-> int:
-    event_data = context.user_data['event_data']
+def first_event_menu(update: Update, context: CallbackContext) -> int:
 
-    buttons =[
+    is_new_event = context.user_data['event_creation']
+
+    buttons = [
                 [InlineKeyboardButton(text="Event datetime", callback_data='start')],
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
@@ -478,7 +483,7 @@ def first_event_menu(update:Update, context:CallbackContext)-> int:
                 [InlineKeyboardButton(text='Access', callback_data='access')],
                 ]
 
-    if event_data == {}:
+    if is_new_event:
         try:
             event_date = datetime.strptime(update.message.text, "%d-%m-%Y@%H%M")
 
@@ -490,60 +495,60 @@ def first_event_menu(update:Update, context:CallbackContext)-> int:
 
         else:
             event_id = int(event_date.strftime("%Y%m%d%H%M"))
-            context.user_data['original_id'] = event_id
-            event_data = {
-                    'id' : event_id,
-                    'event_type' : "Field Training",
-                    'event_date' : event_date.strftime("%Y-%m-%d"),
-                    'start_time' : event_date.strftime("%H:%M"),
-                    'end_time' : (event_date + timedelta(hours=2)).strftime("%H:%M"),
-                    'location' : str(),
-                    'announcement' : str(),
-                    'access_control' : 2
-                    }
-            context.user_data['event_data'] = event_data
+            event_instance = AdminEventManager(event_id, record_exist=False)
+            event_instance.new_event_parse()
+
+            context.user_data['event_instance'] = event_instance
 
             buttons.append(
                     [
-                        #InlineKeyboardButton(text='Announce', callback_data='announce'),
-                        InlineKeyboardButton(text="Confirm Changes", callback_data="forward")
+                        # InlineKeyboardButton(text='Announce', callback_data='announce'),
+                        InlineKeyboardButton(
+                            text="Confirm Changes", callback_data="forward"
+                            )
                         ]
                     )
             bot_message = update.message.reply_text(text="initialising event...")
     else:
         query = update.callback_query
         query.answer()
+        event_instance = context.user_data['event_instance']
         bot_message = query.edit_message_text("initialising event...")
-        event_date = datetime.strptime(str(event_data['id']), '%Y%m%d%H%M')
-        context.user_data['original_id'] = event_data['id']
 
         if query.data == 'edit':
-           buttons.append([InlineKeyboardButton(text="Confirm Changes", callback_data="forward")])
+            buttons.append([InlineKeyboardButton(
+                text="Confirm Changes", callback_data="forward")]
+                           )
         elif query.data == 'remove':
             buttons = [
-                    [InlineKeyboardButton(text="Confirm Deletion?", callback_data="delete")],
+                    [InlineKeyboardButton(
+                        text="Confirm Deletion?", callback_data="delete")
+                     ],
                     ]
 
     reply_markup = InlineKeyboardMarkup(buttons)
     bot_message.edit_text(
             text=f"""
-event date : {event_date.strftime('%d-%m-%y, %a')}
-start : {event_data['start_time']}
-end : {event_data['end_time']}
-type of event : {event_data['event_type']}
-location : {event_data['location']}
-access : {event_data['access_control']}
+event date : {event_instance.event_date.strftime('%d-%m-%y, %a')}
+start : {event_instance.pretty_start()}
+end : {event_instance.pretty_end()}
+type of event : {event_instance.event_type}
+location : {event_instance.location}
+access : {event_instance.access_control}
                     """,
             reply_markup=reply_markup
             )
     return 3
 
+
 @secure(access=5)
 @send_typing_action
-def event_menu(update:Update, context:CallbackContext)-> int:
-    prev_form = context.user_data['form'] # data is 'query' or 'datetime' or 'time'
+def event_menu(update: Update, context: CallbackContext) -> int:
+    prev_form = context.user_data['form']  # data is 'query' or 'datetime' or 'time'
+    event_instance = context.user_data['event_instance']
+
     text = ''
-    buttons =[
+    buttons = [
                 [InlineKeyboardButton(text="Event datetime", callback_data='start')],
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
@@ -563,14 +568,12 @@ def event_menu(update:Update, context:CallbackContext)-> int:
         query = update.callback_query
         query.answer()
         bot_message = query.edit_message_text('parsing new changes...')
-        data_update = query.data.split(',')
-        if data_update[0] == 'access_control':
-            context.user_data['event_data'][data_update[0]] = int(data_update[1])
-        else:
-            context.user_data['event_data'][data_update[0]] = data_update[1]
-            
+        field, val = query.data.split(',')
+        if field == 'access_control':
+            event_instance.set_access(int(val))
+        elif field == 'event_type':
+            event_instance.set_event_type(val)
 
-        
     else:
 
         bot_message = update.message.reply_text('parsing new changes...')
@@ -581,9 +584,8 @@ def event_menu(update:Update, context:CallbackContext)-> int:
             except ValueError:
                 text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
             else:
-                context.user_data['event_data']['id'] = int(event_date.strftime("%Y%m%d%H%M"))
-                context.user_data['event_data']['event_date'] = event_date.strftime("%Y-%m-%d")
-                context.user_data['event_data']['start_time'] = event_date.strftime("%H:%M")
+                event_instance.set_event_date(event_date)
+                event_instance.set_id(event_date=event_date)
 
         elif prev_form == "time":
             try:
@@ -591,22 +593,21 @@ def event_menu(update:Update, context:CallbackContext)-> int:
             except ValueError:
                 text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
             else:
-                context.user_data['event_data']['end_time'] = event_time.strftime("%H:%M")
+                event_time = event_instance.replace_end_time(event_time)
+                event_instance.set_event_end(event_time)
 
         elif prev_form == 'location':
-            context.user_data['event_data']['location'] = update.message.text
+            event_instance.set_location(update.message.text)
 
-            
-    event_data = context.user_data['event_data']
-    event_date = datetime.strptime(str(event_data['id']), '%Y%m%d%H%M')
+    context.user_data['event_instance'] = event_instance
 
-    text+=f"""
-event date : {event_date.strftime('%d-%m-%y, %a')}
-start : {event_data['start_time']}
-end : {event_data['end_time']}
-type of event : {event_data['event_type']}
-location : {event_data['location']}
-access : {event_data['access_control']}
+    text += f"""
+event date : {event_instance.event_date.strftime('%d-%m-%y, %a')}
+start : {event_instance.pretty_start()}
+end : {event_instance.pretty_end()}
+type of event : {event_instance.event_type}
+location : {event_instance.location}
+access : {event_instance.access_control}
                     """
     reply_markup = InlineKeyboardMarkup(buttons)
     bot_message.edit_text(
@@ -619,10 +620,12 @@ access : {event_data['access_control']}
     context.user_data['form'] = ''
     return 3
 
-def change_datetime(update:Update, context:CallbackContext) -> str:
+
+def change_datetime(update: Update, context: CallbackContext) -> str:
     context.user_data['form'] = 'datetime'
-    event_id = context.user_data['event_data']['id']
-    event_date = datetime.strptime(str(event_id),'%Y%m%d%H%M')
+    event_instance = context.user_data['event_instance']
+    pretty_date = event_instance.event_date.strftime("%d-%m-%Y@%H%M")
+
     query = update.callback_query
     query.answer()
     query.edit_message_text(
@@ -633,28 +636,37 @@ Note:
 It is <u><b>not recommended</b></u> to change the starting date and time of an event. Only do so after a consensus on a schedule changed has been reached.
 
 <i>Otherwise, affected players attending the event will not know of the schedule change but their attendance will still reflect as per previous schedule</i>
-\n\nEg. original datetime: <code>{event_date.strftime('%d-%m-%Y@%H%M')}</code>""",
+\n\nEg. original datetime: <code>{pretty_date}</code>""",
             parse_mode='html'
                     )
 
     return "event_menu"
 
-def change_time(update:Update, context:CallbackContext) -> str:
+
+def change_time(update: Update, context: CallbackContext) -> str:
     context.user_data['form'] = 'time'
     query = update.callback_query
+    event_instance = context.user_data['event_instance']
     query.answer()
-    query.edit_message_text(f"Text me the ending time of the event in the format HHMM\n\n For eg. time now: {datetime.now().strftime('%H%M')}")
 
+    cur_time = event_instance.end_time.strftime('%H%M')
+    query.edit_message_text(f"""
+Text me the ending time of the event in the format HHMM
+
+End time currently set to: <code>{cur_time}</code>""",
+                            parse_mode='html'
+                            )
     return "event_menu"
 
-def formatting_error(update:Update, context:CallbackContext) -> int:
+
+def formatting_error(update: Update, context: CallbackContext) -> int:
     update.message.reply_text(
             "Format seems to be wrong please try again "
             )
     return 'event_menu'
 
 
-def edit_type(update:Update, context:CallbackContext) -> str:
+def edit_type(update: Update, context: CallbackContext) -> str:
     context.user_data['form'] = 'query'
     query = update.callback_query
     query.answer()
@@ -668,21 +680,21 @@ def edit_type(update:Update, context:CallbackContext) -> str:
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(
-            text=f"""
-Select the type of event:
-(You may use Scrim to indicate tournament availability as well)
+            text="""
+Select the type of event: (You may use Scrim to indicate tournament availability as well)
 
             """,
             reply_markup=reply_markup
             )
     return "event_menu"
 
-def edit_location(update:Update, context:CallbackContext) -> str:
+
+def edit_location(update: Update, context: CallbackContext) -> str:
     context.user_data['form'] = 'location'
     query = update.callback_query
     query.answer()
     query.edit_message_text(
-            text=f"""
+            text="""
 Text the location of the event.
 Generic location titles or google map links are accepted
             """
@@ -690,7 +702,8 @@ Generic location titles or google map links are accepted
 
     return "event_menu"
 
-def edit_access(update:Update, context:CallbackContext) -> str:
+
+def edit_access(update: Update, context: CallbackContext) -> str:
     context.user_data['form'] = 'query'
     query = update.callback_query
     query.answer()
@@ -701,98 +714,55 @@ def edit_access(update:Update, context:CallbackContext) -> str:
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(
-            text="Choose the access level for the event, members of higher access control can participate in events of lower access control\n\n for eg. Club members can participate in events with 'Guest' level access",
+            text="""
+Choose the access level for the event, members of higher
+access control can participate in events of lower access control
+
+for eg. Club members can participate in events with 'Guest' level access""",
             reply_markup=reply_markup
             )
 
     return "event_menu"
 
-def delete_event(update:Update, context:CallbackContext) -> int:
+
+def delete_event(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
-    event_id = context.user_data['event_data']['id']
-    event_date = datetime.strptime(str(event_id), "%Y%m%d%H%M")
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.execute("BEGIN TRANSACTION")
-        db.execute("DELETE FROM events WHERE id = ?", (event_id, ))
-        db.execute("DELETE FROM attendance WHERE event_id = ?", (event_id, ))
-        db.commit()
+    event_instance = context.user_data['event_instance']
+
+    event_instance.remove_event_from_record()
 
     query.edit_message_text("event has been delete sucessfully.")
-    logger.info("user %s has deleted event on %s", user.first_name, event_date.strftime("%d-%m-%y"))
+    logger.info(
+            "user %s has deleted event on %s", user.first_name,
+            event_instance.event_date.strftime("%d-%m-%y")
+            )
     return ConversationHandler.END
 
 
-def commit_event_changes(update:Update, context:CallbackContext) -> str:
+def commit_event_changes(update: Update, context: CallbackContext) -> str:
     query = update.callback_query
     query.answer()
     user = update.effective_user
+    event_instance = context.user_data['event_instance']
 
-    event_id = context.user_data['event_data']['id']
-    original_id = context.user_data['original_id']
+    if event_instance.check_conflicts():
+        buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
+        context.user_data['form'] = 'rejected'
+        query.edit_message_text(
+                text="There already exists an event at this time and date. please edit starting datetime",
+                reply_markup=InlineKeyboardMarkup(buttons)
+                )
+        return "event_menu"
+    event_instance.push_event_to_db()
 
-    with sqlite3.connect(CONFIG['database']) as db:
-        #first check if there are duplicated events
-        existing_events = db.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchall()
-        event_data = context.user_data['event_data']
-
-        db.execute("BEGIN TRANSACTION")
-        if context.user_data['event_creation']:
-            if len(existing_events) > 0:
-                buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
-                context.user_data['form'] = 'rejected'
-                query.edit_message_text(
-                        text="There already exists an event at this time and date. please edit starting datetime",
-                        reply_markup=InlineKeyboardMarkup(buttons)
-                        )
-                return "event_menu"
-
-            query.edit_message_text('creating new event...')
-            data = [
-                            event_data['id'],
-                            event_data['event_type'],
-                            event_data['event_date'],
-                            event_data['start_time'],
-                            event_data['end_time'],
-                            event_data['location'],
-                            None,
-                            event_data['access_control'],
-                            ]
-            db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)", data)
-        else:
-
-            if original_id != event_id and len(existing_events) > 0:
-                buttons = [[InlineKeyboardButton(text='Return to menu', callback_data='^back$')]]
-                context.user_data['form'] = 'rejected'
-                query.edit_message_text(
-                        text="There already exists an event at this time and date. please edit starting datetime",
-                        reply_markup=InlineKeyboardMarkup(buttons)
-                        )
-                return "event_menu"
-
-            query.edit_message_text('updating event...')
-            data = [
-                    event_data['id'],
-                    event_data['event_type'],
-                    event_data['event_date'],
-                    event_data['start_time'],
-                    event_data['end_time'],
-                    event_data['location'],
-                    event_data['access_control'],
-                    original_id
-                    ]
-            db.execute("UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, access_control = ? WHERE id = ?", data)
-
-            #update id change on attendance
-            db.execute("UPDATE attendance SET event_id = ? WHERE event_id = ?", (event_data['id'], original_id))
-        db.commit()
     query.edit_message_text(
             text="event sucessfully added/updated! Announce new event or changes by /announce_event!"
             )
     logger.info("user %s has successfully updated an event", user.first_name)
-        
     return ConversationHandler.END
+
 
 @secure(access=6)
 @send_typing_action
@@ -1129,7 +1099,7 @@ def main():
             BotCommand("access_control_administration", "change access control of players"),
             BotCommand("cancel", "cancel any existing operation"),
             BotCommand("help", "help"),
-            ] 
+            ]
     Bot(admin_token).set_my_commands(commands)
 
     updater = Updater(admin_token)
@@ -1138,7 +1108,7 @@ def main():
     conv_handler_attendance_list = ConversationHandler(
             entry_points=[CommandHandler('attendance_list', choosing_date)],
             states={
-                1 : [
+                1: [
                     CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$' ),
                     CallbackQueryHandler(reply_attendance_list, pattern='^(\d{10}|\d{12})$')
                     ],
@@ -1162,7 +1132,7 @@ def main():
             entry_points=[CommandHandler('announce_event', choosing_date)],
             states={
                 1 : [
-                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$' ),
+                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
                     CallbackQueryHandler(write_message, pattern='^(\d{10}|\d{12})$'),
                     ], 
                 2 : [MessageHandler(Filters.text & ~Filters.command ,confirm_message)],
@@ -1177,7 +1147,7 @@ def main():
     conv_handler_remind = ConversationHandler(
         entry_points=[CommandHandler("remind", choosing_date)],
         states={
-            1 : [
+            1: [
                 CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$' ),
                 CallbackQueryHandler(send_reminders, pattern='^(\d{10}|\d{12})$')
                 ],
