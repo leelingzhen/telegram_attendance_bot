@@ -45,13 +45,15 @@ class UserManager:
         self.gender = None
         self.position = None
 
+    def set_telegram_user(self):
+        self.telegram_user = self.username
+
     def retrieve_user_data(self) -> list:
         """
         retrieve user data from the db
         returns user profiles in a list
 
         """
-
         with sqlite3.connect(CONFIG["database"]) as db:
             db.row_factory = sqlite3.Row
             user_profile = db.execute(
@@ -68,6 +70,15 @@ class UserManager:
             self.gender = user_profile['gender']
 
             return user_profile
+
+    def username_tally(self):
+        """
+        returns true if the telegram_user == username
+        """
+        if self.telegram_user is None:
+            return True
+        return self.telegram_user == self.username
+
 
     def cache_new_user(self) -> None:
         """

@@ -594,34 +594,32 @@ def settings_start(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     logger.info("User %s is accessing settings...", user.first_name)
 
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        result = db.execute("SELECT * FROM players WHERE id = ?", (user.id, )).fetchone()
-        name = result["name"]
-        notification = result["notification"]
-        language = result["language_pack"]
-        saved_username = result["telegram_user"]
+    user_instance = UserManager(user)
+    user_instance.retrieve_user_data()
 
-    if user.username != saved_username:
-        db.execute("BEGIN TRANSACTION")
-        db.execute("UPDATE players SET username = ? WHERE id = ?", (user.username, user_id))
-        db.commit()
+    if not user_instance.username_tally():
+        user_instance.set_username()
 
     # save into context
-    context.user_data["user_id"] = user.id
-    context.user_data["name"] = name
-    context.user_data["notification"] = notification
-    context.user_data["language"] = language
+    # context.user_data["user_id"] = user.id
+    # context.user_data["name"] = name
+    # context.user_data["notification"] = notification
+    # context.user_data["language"] = language
+    context.user_data['user_instance'] = user_instance
 
     buttons = [
             [InlineKeyboardButton(text="Name", callback_data="name")],
             [InlineKeyboardButton(text="Notification settings", callback_data="notification")],
-            [InlineKeyboardButton(text="Language settings", callback_data="language")]
+            # [InlineKeyboardButton(text="Language settings", callback_data="language")]
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
 
     update.message.reply_text(
-            text=f"Current settings\nName: {name}\nNotifications: {'Yes' if notification == 1 else 'No'}\nLanguage pack: {language}\n",
+            text=f"""
+Current settings
+Name: {user_instance.name}
+Notifications: {'Yes' if user_instance.notification == 1 else 'No'}
+""",
             reply_markup=reply_markup
             )
     return 1
