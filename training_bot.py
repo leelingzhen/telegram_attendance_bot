@@ -1,11 +1,10 @@
 import logging
 import os
-import re
 import helpers
 import json
 import sqlite3
 
-from datetime import date, datetime
+from datetime import datetime
 from functools import wraps
 from user_manager import UserManager
 from event_manager import TrainingEventManager, AttendanceManager
@@ -879,10 +878,10 @@ def review_membership(update:Update, context:CallbackContext) -> int:
     return 1
 
 def commit_membership_position(update:Update, context:CallbackContext) -> int:
-    user =  update.effective_user
+    user = update.effective_user
     query = update.callback_query
     query.answer()
-    
+
     if query.data == "forward":
         with sqlite3.connect(CONFIG['database']) as db:
             db.execute('BEGIN TRANSACTION')
@@ -902,7 +901,7 @@ Your commitment has been noted and is under the review of the core team 🥹
 
 
 @send_typing_action
-def cancel(update:Update, context: CallbackContext) -> int:
+def cancel(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     update.message.reply_text(
             text="process cancelled, see you next time!"

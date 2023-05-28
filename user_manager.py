@@ -43,6 +43,7 @@ class UserManager:
         self.telegram_user = None
         self.hidden = None
         self.gender = None
+        self.position = None
 
     def retrieve_user_data(self) -> list:
         """
@@ -94,6 +95,20 @@ class UserManager:
             access = db.execute(
                 "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()[0]
         return access
+
+    def parse_access_control_description(self, access=None):
+        if self.access is None:
+            return None
+        if access is None:
+            access = self.access
+
+        with sqlite3.connect(CONFIG["database"]) as db:
+            position = db.execute(
+                "SELECT * FROM access_control_description WHERE id = ?", (
+                    access, )
+            ).fetchone()[1]
+
+            return position
 
     def get_event_dates(self,
                         from_date: date = 0) -> sqlite3.Row:
@@ -151,6 +166,24 @@ class UserManager:
                 dict_date[event_type].append(event_date)
 
         return dict_date
+
+
+class PlayerAccessRecord(UserManager):
+    def __init__(self, id):
+        """
+        initialise user from id from db
+        """
+        self.id = id
+        self.retrieve_user_data()
+        self.access = self.get_user_access()
+        self.position = self.parse_access_control_description()
+
+        self.new_access = None
+        self.new_position = None
+
+    def set_new_access(self, access):
+        self.new_access = access
+        self.new_position = self.parse_access_control_description(access)
 
 
 class AdminUser(UserManager):
@@ -273,6 +306,37 @@ class AdminUser(UserManager):
                 yield 'success'
             yield telegram_user
 
+    def get_access_levels(self) -> sqlite3.Row:
+        """
+        based on the access control of the admin user,
+        get the levels of access available to the user
+        """
+        with sqlite3.connect(CONFIG["database"]) as db:
+            db.row_factory = sqlite3.Row
+            access_data = db.execute(
+                'SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
+
+        if self.access == 100:
+            access_data = access_data[1:8]
+        return access_data
+
+    def select_players_on_access(self, access: int) -> sqlite3.Row:
+        """
+        return user ids and name based on the access selected
+        """
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+            players = db.execute("""
+                    SELECT id, name FROM players
+                    JOIN access_control ON players.id = access_control.player_id
+                    WHERE control_id = ?
+                    ORDER BY
+                    name COLLATE NOCASE
+                    """,
+                                 (access, )
+                                 ).fetchall()
+        return players
+
     def read_msg_from_file(self, date_str: str) -> str:
         """
         reads strings from a txt file
@@ -282,3 +346,12 @@ class AdminUser(UserManager):
         with open(filename, "r", encoding="utf-8") as text_f:
             msg = text_f.read().replace("{date}", date_str).rstrip()
         return msg
+
+    def generate_player_access_record(self, id):
+        return PlayerAccessRecord(id)
+
+    def push_player_access(self, player: PlayerAccessRecord):
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.execute("UPDATE access_control SET control_id = ? WHERE player_id = ?",
+                       (player.new_access, player.id))
+            db.commit()

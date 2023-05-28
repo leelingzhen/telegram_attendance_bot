@@ -4,11 +4,11 @@ import helpers
 import json
 import sqlite3
 
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from functools import wraps
 
 from user_manager import UserManager, AdminUser
-from event_manager import AdminEventManager, AttendanceManager
+from event_manager import AdminEventManager
 
 from telegram import (
         Update,
@@ -766,20 +766,12 @@ def commit_event_changes(update: Update, context: CallbackContext) -> str:
 
 @secure(access=6)
 @send_typing_action
-def choose_access_level(update:Update, context:CallbackContext) -> int:
+def choose_access_level(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    logger.info("user %s is started /access_control_administration", user.first_name)
-    
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        user_access = db.execute('SELECT control_id FROM access_control WHERE player_id = ? ', (user.id, )).fetchone()['control_id']
-        if user_access == 100:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
-        else:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id < 100 ORDER BY id').fetchall()
+    user_instance = AdminUser(user)
 
-    if user_access != 100:
-        access_data = access_data[1:]
+    logger.info("user %s is started /access_control_administration", user.first_name)
+    access_data = user_instance.get_access_levels()
 
     buttons = list()
     for row in access_data:
@@ -828,22 +820,14 @@ Pick position:
     return 1
 
 @secure(access=6)
-def choose_access_level_again(update:Update, context:CallbackContext) -> int:
+def choose_access_level_again(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
+
+    user_instance = AdminUser(user)
+    access_data = user_instance.get_access_levels()
     
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        user_access = db.execute('SELECT control_id FROM access_control WHERE player_id = ? ', (user.id, )).fetchone()['control_id']
-        if user_access == 100:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
-        else:
-            access_data = db.execute('SELECT * FROM access_control_description WHERE id < 100 ORDER BY id').fetchall()
-
-    if user_access != 100:
-        access_data = access_data[1:]
-
     buttons = list()
     for row in access_data:
         button = InlineKeyboardButton(text=row['description'], callback_data=str(row['id']))
@@ -892,33 +876,27 @@ Pick position:
 
 
 @secure(access=6)
-def choose_players(update:Update, context:CallbackContext) -> int:
+def choose_players(update: Update, context: CallbackContext) -> int:
+    user = update.effective_user
     query = update.callback_query
     query.answer()
+
+    user_instance = AdminUser(user)
+
     try:
         selected_access = int(query.data)
     except ValueError:
         selected_access = context.user_data['selected_access']
     context.user_data['selected_access'] = selected_access
 
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        player_data = db.execute("""
-                SELECT id, name, telegram_user, access_control.control_id FROM players
-                JOIN access_control ON players.id = access_control.player_id
-                WHERE control_id = ?
-                ORDER BY
-                name
-                """,
-                (selected_access, )
-                ).fetchall()
+    player_data = user_instance.select_players_on_access(selected_access)
 
     buttons = list()
     for row in player_data:
         button = InlineKeyboardButton(text=row['name'], callback_data=str(row['id']))
         buttons.append([button])
     buttons.append([InlineKeyboardButton(text="Back", callback_data='back')])
-    reply_markup=InlineKeyboardMarkup(buttons)
+    reply_markup = InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
             text=
@@ -963,14 +941,23 @@ Pick position:
 
 @secure(access=6)
 def change_player_access(update:Update, context:CallbackContext) -> int:
-    query =  update.callback_query
+    user = update.effective_user
+    query = update.callback_query
     query.answer()
+    user_instance = AdminUser(user)
+
+
     try:
         selected_player_id = int(query.data)
     except ValueError:
         selected_player_id = context.user_data['selected_player_id']
 
+    selected_player = user_instance.generate_player_access_record(
+            selected_player_id
+            )
+
     context.user_data['selected_player_id'] = selected_player_id
+    context.user_data['selected_player'] = selected_player
     selected_access = context.user_data['selected_access']
     buttons = [
             [InlineKeyboardButton(text="Guest", callback_data='2')],
@@ -980,25 +967,13 @@ def change_player_access(update:Update, context:CallbackContext) -> int:
             [InlineKeyboardButton(text='Team Manager', callback_data='7')],
             [InlineKeyboardButton(text="Kick", callback_data="0")],
             ]
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        player_data = db.execute("""
-                SELECT id, name, telegram_user, gender FROM players
-                WHERE id = ?
-                """,
-                (selected_player_id, )).fetchone()
-        position = db.execute("SELECT * FROM access_control_description WHERE id = ?", (selected_access, )).fetchone()
-
-        context.user_data['player_data'] = player_data
-        context.user_data['position'] = position
-
-
     reply_markup = InlineKeyboardMarkup(buttons)
+
     text = f"""
-Player : {player_data['name']}
-handle : @{player_data['telegram_user']}
-gender : {player_data['gender']}
-position : {position['description']}
+player : {selected_player.name}
+handle : @{selected_player.telegram_user}
+gender : {selected_player.gender}
+position : {selected_player.position}
 
 What is the new position for this player?
 
@@ -1012,64 +987,56 @@ What is the new position for this player?
 
 
 @secure(access=6)
-def review_access_change(update:Updater, context:CallbackContext) -> int:
+def review_access_change(update: Updater, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    selected_player_id = context.user_data['selected_player_id']
-    selected_access = context.user_data['selected_access']
-    player_data = context.user_data['player_data']
-    position = context.user_data['position']
+    selected_player = context.user_data['selected_player']
 
     new_selected_access = int(query.data)
-    context.user_data['new_selected_access'] = new_selected_access
+    selected_player.set_new_access(new_selected_access)
 
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        new_position = db.execute('SELECT * FROM access_control_description WHERE id = ?', (new_selected_access,)).fetchone()
-        context.user_data['new_position'] = new_position
+    context.user_data['selected_player'] = selected_player
 
     buttons = [
             [InlineKeyboardButton(text='Confirm position', callback_data='^forward$')],
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
     text = f"""
-Player : {player_data['name']}
-handle : @{player_data['telegram_user']}
-gender : {player_data['gender']}
-position : {position['description']}
-new position : {new_position['description']}
+player : {selected_player.name}
+handle : @{selected_player.telegram_user}
+gender : {selected_player.gender}
+position : {selected_player.position}
+new position : {selected_player.new_position}
 
-Confirm new position for {player_data['name']}?
+Confirm new position for {selected_player.name}?
     """
     query.edit_message_text(
             text=text,
             reply_markup=reply_markup
             )
     return 4
-    
+
 
 @secure(access=6)
-def commit_access_change(update:Updater, context:CallbackContext) -> int:
+def commit_access_change(update: Updater, context: CallbackContext) -> int:
     user = update.effective_user
     query = update.callback_query
     query.answer()
-    selected_player_id = context.user_data['selected_player_id']
-    selected_access = context.user_data['selected_access']
-    new_selected_access = context.user_data['new_selected_access']
-    old_pos = context.user_data['position']['description']
-    new_pos = context.user_data['new_position']['description']
-    with sqlite3.connect(CONFIG['database']) as db:
-        player_name = db.execute('SELECT name FROM players WHERE id = ?', (selected_player_id, )).fetchone()[0]
-        db.execute('BEGIN TRANSACTION')
-        db.execute('UPDATE access_control SET control_id = ? WHERE player_id = ?', (new_selected_access, selected_player_id))
-        db.commit()
-    query.edit_message_text(text=f"{player_name} is now {new_pos}")
-    logger.info("user %s sucessfully changed the access control of %s from %s to %s", user.first_name, player_name, old_pos, new_pos)
+
+    user_instance = AdminUser(user)
+    selected_player = context.user_data['selected_player']
+
+    user_instance.push_player_access(selected_player)
+
+    query.edit_message_text(text=f"{selected_player.name} is now {selected_player.new_position}")
+    logger.info("user %s sucessfully changed the access control of %s from %s to %s",
+                user.first_name, selected_player.name, selected_player.position, selected_player.new_position)
     return ConversationHandler.END
 
+
 @send_typing_action
-def cancel(update:Update, context: CallbackContext) -> int:
+def cancel(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
 
     context.bot.send_message(
@@ -1079,16 +1046,17 @@ def cancel(update:Update, context: CallbackContext) -> int:
     logger.info("user %s has cancelled a process", user.first_name)
     return ConversationHandler.END
 
+
 def main():
     with open(os.path.join(".secrets", "bot_credentials.json"), "r") as f:
-            bot_tokens = json.load(f)
+        bot_tokens = json.load(f)
 
     if CONFIG["development"]:
         admin_token = bot_tokens["admin_dev_bot"]
     else:
         admin_token = bot_tokens["admin_bot"]
 
-    #setting command list
+    # setting command list
     commands = [
             BotCommand("start", "to start a the bot"),
             BotCommand("attendance_list", "get attendance of players for an event"),
@@ -1203,7 +1171,6 @@ def main():
             fallbacks=[CommandHandler('cancel', cancel)]
             )
 
-
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(conv_handler_attendance_list)
     dispatcher.add_handler(conv_handler_announce)
@@ -1215,6 +1182,7 @@ def main():
 
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == "__main__":
     main()
