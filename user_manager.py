@@ -44,9 +44,45 @@ class UserManager:
         self.hidden = None
         self.gender = None
         self.position = None
+        self.notification = None
+        self.language = None
+
+    def set_gender(self, gender: str):
+        self.gender = gender
+
+    def set_notification(self, notification):
+        self.notification = notification
+
+    def get_exisiting_name(self, name):
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+            data = (name, self.id)
+            similar_names = db.execute(
+                "SELECT telegram_user FROM players WHERE name = ? AND id != ?", data).fetchone()
+        if similar_names:
+            return "@" + similar_names['telegram_user']
+        return None
+
+    def set_name(self, name):
+        self.name = name
 
     def set_telegram_user(self):
         self.telegram_user = self.username
+
+    def push_update_user(self):
+        with sqlite3.connect(CONFIG["database"]) as db:
+            db.execute("BEGIN TRANSACTION")
+            db.execute("UPDATE players SET name = ?, notification = ? WHERE id = ?",
+                       (self.name, self.notification, self.id))
+            db.commit()
+
+    def push_new_user(self):
+        db.execute("BEGIN TRANSACTION")
+        data = (self.name, self.gender, self.id)
+        db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
+        data = (1, self.id)
+        db.execute('UPDATE access_control SET control_id=? WHERE player_id = ?', data)
+        db.commit()
 
     def retrieve_user_data(self) -> list:
         """
@@ -68,6 +104,8 @@ class UserManager:
             self.telegram_user = user_profile['telegram_user']
             self.hidden = user_profile['hidden']
             self.gender = user_profile['gender']
+            self.notication = user_profile['notification']
+            self.language = user_profile['language_pack']
 
             return user_profile
 
@@ -78,7 +116,6 @@ class UserManager:
         if self.telegram_user is None:
             return True
         return self.telegram_user == self.username
-
 
     def cache_new_user(self) -> None:
         """
@@ -104,8 +141,11 @@ class UserManager:
         """
         with sqlite3.connect(CONFIG["database"]) as db:
             access = db.execute(
-                "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()[0]
-        return access
+                "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()
+
+        if not access:
+            return 0
+        return access[0]
 
     def parse_access_control_description(self, access=None):
         if self.access is None:

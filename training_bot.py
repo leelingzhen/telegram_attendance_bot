@@ -628,10 +628,13 @@ Notifications: {'Yes' if user_instance.notification == 1 else 'No'}
 def name_change(update: Update, context: CallbackContext) -> float:
     query = update.callback_query
     query.answer()
+
+    user_instance = context.user_data['user_instance']
+
     query.edit_message_text(
             text=(
                 f"""
-Your name is currently set as <u>{context.user_data['name']}</u>
+Your name is currently set as <u>{user_instance.name}</u>
 <b>Please use your full name</b>
 text me your name if you wish to change it\n\n
 otherwise /cancel to cancel the process
@@ -645,6 +648,8 @@ otherwise /cancel to cancel the process
 def notification_change(update: Update, context: CallbackContext) -> float:
     query = update.callback_query
     query.answer()
+    user_instance = context.user_data['user_instance']
+
     buttons = [
             [InlineKeyboardButton(text="Yes", callback_data=str(1))],
             [InlineKeyboardButton(text="No", callback_data=str(0))]
@@ -659,7 +664,7 @@ you are an <u>active player</u>
 <b>Yes</b> - Receive all club announcements and event reminders
 <b>No</b> - Receive only event specific announcements if you indicated 'Yes' for the said event
 
-current selection - {'Yes'if context.user_data['notification'] == 1 else 'No'}
+current selection - {'Yes'if user_instance.notification == 1 else 'No'}
 
 Choose notification setting
                 """),
@@ -682,23 +687,22 @@ def language_change(update: Update, context: CallbackContext) -> int:
 def commit_notification_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
+    user_instance = context.user_data['user_instance']
 
-    notification_setting = int(query.data)
-    with sqlite3.connect(CONFIG["database"]) as db:
-        db.execute("BEGIN TRANSACTION")
-        db.execute("UPDATE players SET notification = ? WHERE id = ?", (notification_setting, context.user_data["user_id"]))
-        db.commit()
+    notification = int(query.data)
+    user_instance.set_notification(notification)
+    user_instance.push_update_user()
 
     query.edit_message_text(
             text=
             f"""
-You have sucessfully turned {'off' if notification_setting == 0 else 'on'} notifications
+You have sucessfully turned {'off' if notification == 0 else 'on'} notifications
 
-<i>You are now an {'inactive player' if notification_setting == 0 else 'active player'}</i>
+<i>You are now an {'inactive player' if notification == 0 else 'active player'}</i>
             """,
-            parse_mode = 'html'
+            parse_mode='html'
             )
-    logger.info("User %s has sucessfully changed notification settings and is now an %s player.", context.user_data["name"], "active" if notification_setting == 1 else "inactive")
+    logger.info("User %s has sucessfully changed notification settings and is now an %s player.", user_instance.name, "active" if notification == 1 else "inactive")
     return ConversationHandler.END
 
 
@@ -708,23 +712,23 @@ def confirmation_name_change(update: Update, context: CallbackContext) -> float:
         [InlineKeyboardButton(text="Confirm", callback_data="forward")],
         [InlineKeyboardButton(text="Edit Name", callback_data="back")]
         ]
-    user = update.effective_user
     new_name = update.message.text.rstrip().lstrip()
-    with sqlite3.connect(CONFIG['database']) as db:
-        data = (new_name, user.id)
-        similar_names = db.execute("SELECT telegram_user FROM players WHERE name = ? AND id != ?", data).fetchone()
 
-    if similar_names is not None:
+    user_instance = context.user_data['user_instance']
+
+    exisiting_user = user_instance.get_exisiting_name(new_name)
+
+    if exisiting_user is not None:
         bot_message = update.message.reply_text(
-                text=f"{new_name} has already been taken by @{similar_names[0]}.\n please enter a new name!"
+                text=f"{new_name} has already been taken by @{exisiting_user}.\n please enter a new name!"
                 )
         return 1.1
 
-    context.user_data["new_name"] = new_name
+    user_instance.set_name(new_name)
 
     bot_message = update.message.reply_text(
             f"Your name will be:\n"
-            f"<u>{new_name}</u>\n\n"
+            f"<u>{user_instance.name}</u>\n\n"
             "confirm?",
             parse_mode="html",
             reply_markup=InlineKeyboardMarkup(buttons)
@@ -737,38 +741,37 @@ def commit_name_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    new_name = context.user_data["new_name"]
-    with sqlite3.connect(CONFIG["database"]) as db:
-        db.execute("BEGIN TRANSACTION")
-        db.execute("UPDATE players SET name = ? WHERE id = ?", (new_name, context.user_data["user_id"]))
-        db.commit()
+    user_instance = context.user_data['user_instance']
+    user_instance.push_update_user()
 
     query.edit_message_text(
-            text=f"Name sucessfully changed to <u>{new_name}</u>",
+            text=f"Name sucessfully changed to <u>{user_instance.name}</u>",
             parse_mode="html"
             )
-    name = context.user_data["name"]
-    logging.info("User %s has changed name from %s to %s", user.username, name, new_name)
+
+    logging.info("User %s has changed name to %s", user.username, user_instance.name)
 
     return ConversationHandler.END
 
+
 @send_typing_action
-def select_gender(update:Update, context:CallbackContext) -> int:
+def select_gender(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    with sqlite3.connect(CONFIG['database']) as db:
-        player_access = db.execute("SELECT control_id FROM access_control WHERE player_id = ?", (user.id, )).fetchone()[0]
-    
-    if player_access >=2:
+    user_instance = UserManager(user)
+
+    if user_instance.access >= 2:
         update.message.reply_text("You are already registered.")
         return ConversationHandler.END
-    if player_access ==1:
+    if user_instance.access == 1:
         update.message.reply_text("Your registration is pending approval.")
         return ConversationHandler.END
-    
+
+    context.user_data['user_instance'] = user_instance
+
     logger.info("user %s is registering", user.first_name)
     with open(os.path.join('resources', 'messages', 'registration_introduction.txt')) as f:
         text = f.read()
-    buttons=[
+    buttons = [
             [InlineKeyboardButton(text='Male 👦🏻', callback_data='Male')],
             [InlineKeyboardButton(text='Female 👩🏻', callback_data='Female')]
             ]
@@ -777,27 +780,46 @@ def select_gender(update:Update, context:CallbackContext) -> int:
             parse_mode="html",
             reply_markup=InlineKeyboardMarkup(buttons)
             )
+    context.user_data['conv_state'] = 0
     return 1
+
 
 def fill_name(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
+    user_instance = context.user_data['user_instance']
     gender = query.data
-    context.user_data['gender'] = gender
 
-    query.edit_message_text(
+    user_instance.set_gender(gender)
+    bot_message = query.edit_message_text("setting gender...")
+
+    bot_message.edit_text(
             text="Send me your name with your surname!"
             )
+    context.user_data['context_state'] = 1
     return 2
 
-def confirm_name_registration(update:Update, context:CallbackContext) ->int:
+
+def confirm_name_registration(update: Update, context: CallbackContext) -> int:
     name = update.message.text.rstrip().lstrip()
-    context.user_data["name"] = name
+    user_instance = context.user_data['user_instance']
+    bot_msg = update.message.reply_text("checking name conflicts..")
+
+    existing_user = user_instance.get_exisiting_name(name)
+    if existing_user:
+        bot_msg.edit_text(
+                f"{name} is currently taken by {existing_user}, please enter another name"
+                )
+        return 2
+
+    user_instance.set_name(name)
+    context.user_data['user_instance'] = user_instance
+
     buttons = [
             [InlineKeyboardButton(text="Confirm", callback_data="forward")],
             [InlineKeyboardButton(text="Edit name", callback_data="back")]
             ]
-    update.message.reply_text(
+    bot_msg.edit_text(
             text=f"You have sent me: <u>{name}</u>\nConfirm?",
             parse_mode='html',
             reply_markup=InlineKeyboardMarkup(buttons)
@@ -809,28 +831,18 @@ def commit_registration(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     user = update.effective_user
-
-    name = context.user_data['name'] 
-    telegram_user = user.username
-    gender = context.user_data['gender']
-
+    user_instance = context.user_data['user_instance']
+    
     bot_message = query.edit_message_text(
-            text=f"registering... {name}  "
+            text=f"registering... {user_instance.name}  "
             )
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.execute("BEGIN TRANSACTION")
-        data = (name, telegram_user, gender, user.id)
-        db.execute('UPDATE players SET name = ?, telegram_user = ?, gender = ? WHERE id = ?', data)
-        data = (1, user.id)
-        db.execute('UPDATE access_control SET control_id=? WHERE player_id = ?', data)
-        db.commit()
-
+    user_instance.push_new_user()
     text = f"""
 You have sucessfully been registered! Please inform the core/exco team to approve your registration😊😊.
 
-Full name : {name}
-telegram handle : @{telegram_user}
-Gender : {gender}
+Full name : {user_instance.name}
+telegram handle : @{user.username}
+Gender : {user_instance.gender}
 
 
     """
@@ -841,62 +853,64 @@ Gender : {gender}
     logger.info('User %s has sucessfully registered', user.first_name)
     return ConversationHandler.END
 
-@send_typing_action
-@secure(access=2)
-def review_membership(update:Update, context:CallbackContext) -> int:
-    user = update.effective_user
-    logger.info("user %s just initiated /apply_membership", user.first_name)
-
-    with sqlite3.connect(CONFIG['database']) as db:
-        db.row_factory = sqlite3.Row
-        access_control = db.execute('''
-                SELECT control_id, access_control_description.description FROM access_control 
-                JOIN access_control_description ON access_control.control_id = access_control_description.id
-                WHERE player_id = ?
-                ''',
-                (user.id, )
-                ).fetchone()
-        if access_control['control_id'] >= 4:
-            proposition = 'an' if access_control['description'] == 'Admin' else 'a'
-            update.message.reply_text(
-                    f'bruh you are already {proposition} {access_control["description"]} what are you even doing here..'
-                    )
-            logger.info("user %s was just fking around..", user.first_name)
-            return ConversationHandler.END
-
-
-    with open(os.path.join("resources", 'messages', 'membership_registration_terms.txt')) as f:
-        text = f.read()
-    buttons = [
-            [InlineKeyboardButton(text=f"I wanna be part of {CONFIG['team_name']}😊", callback_data="forward")],
-            [InlineKeyboardButton(text="Maybe another time.", callback_data="cancel")]
-            ]
-    reply_markup = InlineKeyboardMarkup(buttons)
-    update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode='html')
-    return 1
-
-def commit_membership_position(update:Update, context:CallbackContext) -> int:
-    user = update.effective_user
-    query = update.callback_query
-    query.answer()
-
-    if query.data == "forward":
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute('BEGIN TRANSACTION')
-            db.execute('UPDATE access_control SET control_id = 3 WHERE player_id = ?', (user.id, ))
-            db.commit()
-        text = f"""
-Thank you for your interest in being a member of {CONFIG['team_name']}😇😇!!
-Your commitment has been noted and is under the review of the core team 🥹
-        """
-        query.edit_message_text(text=text)
-        logger.info("user %s is now pending membership approval", user.first_name)
-        return ConversationHandler.END
-    else:
-        query.edit_message_text("We hope to see you soon!!")
-        logger.info("user %s fking alibaba one", user.first_name)
-        return ConversationHandler.END
-
+#
+# @send_typing_action
+# @secure(access=2)
+# def review_membership(update: Update, context: CallbackContext) -> int:
+#     user = update.effective_user
+#     logger.info("user %s just initiated /apply_membership", user.first_name)
+#
+#     with sqlite3.connect(CONFIG['database']) as db:
+#         db.row_factory = sqlite3.Row
+#         access_control = db.execute('''
+#                 SELECT control_id, access_control_description.description FROM access_control 
+#                 JOIN access_control_description ON access_control.control_id = access_control_description.id
+#                 WHERE player_id = ?
+#                 ''',
+#                 (user.id, )
+#                 ).fetchone()
+#         if access_control['control_id'] >= 4:
+#             proposition = 'an' if access_control['description'] == 'Admin' else 'a'
+#             update.message.reply_text(
+#                     f'bruh you are already {proposition} {access_control["description"]} what are you even doing here..'
+#                     )
+#             logger.info("user %s was just fking around..", user.first_name)
+#             return ConversationHandler.END
+#
+#
+#     with open(os.path.join("resources", 'messages', 'membership_registration_terms.txt')) as f:
+#         text = f.read()
+#     buttons = [
+#             [InlineKeyboardButton(text=f"I wanna be part of {CONFIG['team_name']}😊", callback_data="forward")],
+#             [InlineKeyboardButton(text="Maybe another time.", callback_data="cancel")]
+#             ]
+#     reply_markup = InlineKeyboardMarkup(buttons)
+#     update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode='html')
+#     return 1
+#
+#
+# def commit_membership_position(update: Update, context: CallbackContext) -> int:
+#     user = update.effective_user
+#     query = update.callback_query
+#     query.answer()
+#
+#     if query.data == "forward":
+#         with sqlite3.connect(CONFIG['database']) as db:
+#             db.execute('BEGIN TRANSACTION')
+#             db.execute('UPDATE access_control SET control_id = 3 WHERE player_id = ?', (user.id, ))
+#             db.commit()
+#         text = f"""
+# Thank you for your interest in being a member of {CONFIG['team_name']}😇😇!!
+# Your commitment has been noted and is under the review of the core team 🥹
+#         """
+#         query.edit_message_text(text=text)
+#         logger.info("user %s is now pending membership approval", user.first_name)
+#         return ConversationHandler.END
+#     else:
+#         query.edit_message_text("We hope to see you soon!!")
+#         logger.info("user %s fking alibaba one", user.first_name)
+#         return ConversationHandler.END
+#
 
 @send_typing_action
 def cancel(update: Update, context: CallbackContext) -> int:
@@ -926,7 +940,7 @@ def main():
             BotCommand("event_details", "Get event details"),
             BotCommand("settings", "access settings and refresh username if recently changed"),
             BotCommand("register", "use this command if you're a new player"),
-            BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
+            # BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
             BotCommand("cancel", "cancel any process"),
             ]
 
@@ -1000,9 +1014,9 @@ def main():
                     CallbackQueryHandler(notification_change, pattern="^notification$"),
                     CallbackQueryHandler(language_change, pattern="^language$")
                     ],
-                1.1 : [MessageHandler(Filters.text & ~Filters.command, confirmation_name_change)],
-                1.2 :[CallbackQueryHandler(commit_notification_change, pattern="^\d$")],
-                2.1 : [
+                1.1: [MessageHandler(Filters.text & ~Filters.command, confirmation_name_change)],
+                1.2: [CallbackQueryHandler(commit_notification_change, pattern="^\d$")],
+                2.1: [
                 CallbackQueryHandler(commit_name_change, pattern="^forward$"),
                 CallbackQueryHandler(name_change, pattern="^back$")
                 ],
@@ -1026,16 +1040,16 @@ def main():
                 },
             fallbacks=[CommandHandler('cancel', cancel)],
             )
-    conv_handler_apply_members = ConversationHandler(
-            entry_points=[CommandHandler("apply_membership", review_membership)],
-            states={
-                1: [
-                    CallbackQueryHandler(commit_membership_position),
-                    ],
-                },
-            fallbacks=[CommandHandler('cancel', cancel)]
-            )
-
+    # conv_handler_apply_members = ConversationHandler(
+    #         entry_points=[CommandHandler("apply_membership", review_membership)],
+    #         states={
+    #             1: [
+    #                 CallbackQueryHandler(commit_membership_position),
+    #                 ],
+    #             },
+    #         fallbacks=[CommandHandler('cancel', cancel)]
+    #         )
+    #
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(conv_handler_attendance)
     dispatcher.add_handler(conv_handler_kaypoh)
@@ -1044,7 +1058,7 @@ def main():
     dispatcher.add_handler(conv_handler_register)
     dispatcher.add_handler(conv_handler_save_event)
     dispatcher.add_handler(conv_handler_settings)
-    dispatcher.add_handler(conv_handler_apply_members)
+    # dispatcher.add_handler(conv_handler_apply_members)
     dispatcher.add_handler(CommandHandler("cancel", cancel))
 
     updater.start_polling()
