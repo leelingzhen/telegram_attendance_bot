@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import wraps
 from src.user_manager import UserManager
 from src.event_manager import TrainingEventManager, AttendanceManager
+from src.message_manager import KaypohMessage, KaypohMessageHandler
 
 from telegram import (
         Update,
@@ -178,31 +179,15 @@ def attendance_list(update: Update, context: CallbackContext) -> int:
     # retrieve selected event
     event_id = int(query.data)
 
-    event_instance = TrainingEventManager(event_id)
-    male_records, female_records, absentees, unindicated = event_instance.curate_attendance(attach_usernames=False)
-    total_attendees = len(male_records) + len(female_records)
+    message_instance = KaypohMessage(event_id)
+    message_instance.fill_text_fields(datetime.now())
 
-    event_date = datetime.strptime(str(event_id), '%Y%m%d%H%M')
-    pretty_event_date = event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')
+    bot_message = query.edit_message_text(
+            text=message_instance.text, parse_mode='html'
+            )
 
-    sep = '\n'
-    text = f"""
-Attendance for <b>{event_instance.event_type}</b> on <u>{pretty_event_date}</u> : {total_attendees}
-
-Attending 👦🏻: {len(male_records)}
-{sep.join(male_records)}
-
-Attending 👩🏻: {len(female_records)}
-{sep.join(female_records)}
-
-Absent: {len(absentees)}
-{sep.join(absentees)}
-
-Uninidicated: {len(unindicated)}
-{sep.join(unindicated)}
-
-    """
-    query.edit_message_text(text=text, parse_mode='html')
+    message_instance.store_message_fields(bot_message)
+    message_instance.push_record()
 
     return ConversationHandler.END
 
@@ -300,6 +285,8 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
     if attendance.is_attending():
         bot_comment = f"See you at {event_instance.event_type}! 🦾🦾"
     attendance.update_records()
+    message_handler = KaypohMessageHandler(event_instance.id)
+    message_handler.update_all_message_instances()
     event_date = event_instance.get_event_date().strftime('%-d %b, %a')
 
     text = f"""

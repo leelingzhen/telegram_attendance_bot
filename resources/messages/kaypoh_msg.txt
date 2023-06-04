@@ -1,0 +1,18 @@
+Attendance for <b>{event_type}</b> on <u>{event_date}</u> : {total_attendees}
+
+Attending 👦🏻: {n_male}
+{males}
+
+Attending 👩🏻: {n_female}
+{females}
+
+Absent: {n_absentees}
+{absentees}
+
+Uninidicated: {n_unindicated}
+{unindicated}
+
+
+<i>last updated {date_time_rendered} </i>
+
+

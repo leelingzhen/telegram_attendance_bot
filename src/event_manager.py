@@ -74,6 +74,9 @@ class AttendanceManager:
         print(text)
 
     def update_records(self):
+        """
+        push attendance update to the db
+        """
 
         with sqlite3.connect(CONFIG['database']) as db:
             db.row_factory = sqlite3.Row
