@@ -54,7 +54,7 @@ class KaypohMessage(MessageObject, TrainingEventManager):
         self.bot_token = bot_tokens['dev_bot']
 
         if not self.is_dev:
-            self.bot_token = bot_tokens['training_bot.py']
+            self.bot_token = bot_tokens['training_bot']
 
     def fill_text_fields(self, date_time_rendered: datetime = None):
         """
