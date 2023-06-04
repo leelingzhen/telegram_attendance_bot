@@ -1,9 +1,9 @@
 import sqlite3
-import os
-import logging
+# import os
+# import logging
 import json
 
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from telegram import MessageEntity
 
 
