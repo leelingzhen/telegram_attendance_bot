@@ -31,7 +31,7 @@ class AttendanceManager:
         self.reason = ""
 
         with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.row
+            db.row_factory = sqlite3.Row
             data = db.execute(
                 "SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?",
                 (event_id, player_id)).fetchone()

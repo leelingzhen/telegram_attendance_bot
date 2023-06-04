@@ -355,7 +355,8 @@ class AdminUser(UserManager):
                 if pin:
                     self.pin_message(chat_id, message_object)
                 yield 'success'
-            yield telegram_user
+            else:
+                yield telegram_user
 
     def get_access_levels(self) -> sqlite3.Row:
         """
