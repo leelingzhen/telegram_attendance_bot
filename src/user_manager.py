@@ -248,7 +248,7 @@ class AdminUser(UserManager):
         self.bot_token = bot_tokens['dev_bot']
 
         if not self.is_dev:
-            self.bot_token = bot_tokens['training_bot.py']
+            self.bot_token = bot_tokens['training_bot']
 
     def get_users_list(self,
                        only_active: bool = True,
