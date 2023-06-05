@@ -1048,9 +1048,9 @@ def main():
     # dispatcher.add_handler(conv_handler_apply_members)
     dispatcher.add_handler(CommandHandler("cancel", cancel))
 
-    webhook_url = CONFIG['training_bot']
+    webhook_url = CONFIG['training_bot_url']
 
-    if not CONFIG["use_webhook"]:
+    if CONFIG["use_webhook"]:
         logger.info('initiating webhook on %s', webhook_url)
         updater.start_webhook(
                 listen="0.0.0.0",
