@@ -1048,8 +1048,21 @@ def main():
     # dispatcher.add_handler(conv_handler_apply_members)
     dispatcher.add_handler(CommandHandler("cancel", cancel))
 
-    updater.start_polling()
-    updater.idle()
+    webhook_url = CONFIG['training_bot']
+
+    if not CONFIG["use_webhook"]:
+        logger.info('initiating webhook on %s', webhook_url)
+        updater.start_webhook(
+                listen="0.0.0.0",
+                port=5010,
+                url_path=token,
+                )
+        logger.info('setting webhook...')
+        updater.set_webhook(webhook_url + token)
+    else:
+        logger.info('using polling instead')
+        updater.start_polling()
+        updater.idle()
 
 
 if __name__ == "__main__":
