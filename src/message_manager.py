@@ -156,6 +156,16 @@ class KaypohMessageHandler(KaypohMessage):
             self.records = db.execute('SELECT * FROM kaypoh_messages WHERE event_id = ?',
                                       (self.id, )).fetchall()
 
+    def n_records(self):
+        """
+        get the total number of records:
+        the number of kaypoh messages for the given date
+        returns 0 if records is None
+        """
+
+        return len(self.records) if self.records else 0
+
+
     def update_all_message_instances(self):
         """
         update all instances of kaypoh messages

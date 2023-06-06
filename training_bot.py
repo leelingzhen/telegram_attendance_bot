@@ -285,8 +285,7 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
     if attendance.is_attending():
         bot_comment = f"See you at {event_instance.event_type}! 🦾🦾"
     attendance.update_records()
-    message_handler = KaypohMessageHandler(event_instance.id)
-    message_handler.update_all_message_instances()
+    context.job_queue.run_once(update_kaypoh_messages, 0, context=event_instance)
     event_date = event_instance.get_event_date().strftime('%-d %b, %a')
 
     text = f"""
@@ -321,6 +320,15 @@ Attendance: {'Yes' if attendance.status else 'No'}
 
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
+
+
+def update_kaypoh_messages(context: CallbackContext):
+    logger.info("intitiatin job queue to update kaypoh messages....")
+    event_instance = context.job.context
+    message_handler = KaypohMessageHandler(event_instance.id)
+    message_handler.update_all_message_instances()
+    n_records = message_handler.n_records()
+    logger.info("completed job queue updating messages for %d records", n_records)
 
 
 @secure(access=4)
