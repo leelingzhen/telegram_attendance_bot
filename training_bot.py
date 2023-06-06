@@ -323,7 +323,7 @@ Attendance: {'Yes' if attendance.status else 'No'}
 
 
 def update_kaypoh_messages(context: CallbackContext):
-    logger.info("intitiatin job queue to update kaypoh messages....")
+    logger.info("intitiating job queue to update kaypoh messages....")
     event_instance = context.job.context
     message_handler = KaypohMessageHandler(event_instance.id)
     message_handler.update_all_message_instances()
@@ -333,7 +333,7 @@ def update_kaypoh_messages(context: CallbackContext):
 
 @secure(access=4)
 @send_typing_action
-def choosing_more_dates(update:Update, context: CallbackContext)-> int:
+def choosing_more_dates(update:Update, context: CallbackContext) -> int:
     user = update.effective_user
     helpers.refresh_player_profiles(update, context)
 
@@ -481,6 +481,7 @@ def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
         attendance.set_status(status)
         attendance.set_reason(reason)
         attendance.update_records()
+        context.job_queue.run_once(update_kaypoh_messages, 0, context=event)
         event_date = event.get_event_date()
         pretty_str = event_date.strftime('%-d %b, %a @ %-I:%M%p')
         pretty_str = f"{pretty_str} ({event.event_type})"
