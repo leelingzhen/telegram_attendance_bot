@@ -356,6 +356,10 @@ def choosing_more_dates(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
 
     buttons = helpers.date_buttons(event_data, pages=False)
+    buttons.append([
+        InlineKeyboardButton(text='Confirm', callback_data='forward'),
+        ])
+
     reply_markup = InlineKeyboardMarkup(buttons)
 
     update.message.reply_text(
@@ -374,17 +378,20 @@ def choosing_more_dates_cont(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    # get query
-    event_id = int(query.data)
-
-    # retrieve choosent events
+    # retrieve choosen events
     chosen_events = context.user_data["chosen_events"]
     event_data = context.user_data["event_data"]
 
-    if event_id in chosen_events:
-        chosen_events.remove(event_id)
+    if query.data == "back":
+        pass
+
     else:
-        chosen_events.append(event_id)
+        event_id = int(query.data)
+
+        if event_id in chosen_events:
+            chosen_events.remove(event_id)
+        else:
+            chosen_events.append(event_id)
 
     chosen_events.sort()
     context.user_data["chosen_events"] = chosen_events
@@ -395,7 +402,9 @@ def choosing_more_dates_cont(update: Update, context: CallbackContext) -> int:
 
     # make buttons
     buttons = helpers.date_buttons(event_data, pages=False)
-    buttons.append([InlineKeyboardButton(text='Confirm', callback_data='forward')])
+    buttons.append([
+        InlineKeyboardButton(text='Confirm', callback_data='forward'),
+        ])
     reply_markup = InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
@@ -415,6 +424,16 @@ Selected Dates:
 def indicate_more(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
+    if context.user_data['chosen_events'] == list():
+        buttons = [
+                [InlineKeyboardButton(text="Back", callback_data='back')]
+                ]
+        query.edit_message_text(
+                text="You have not selected any events, please choose at least one event",
+                reply_markup=InlineKeyboardMarkup(buttons)
+                )
+        return 1
+
 
     # initialise status
     context.user_data["gave_reason"] = False
@@ -983,6 +1002,7 @@ def main():
             states={
                 1: [
                     CallbackQueryHandler(choosing_more_dates_cont, pattern='^(\d{10}|\d{12})$'),
+                    CallbackQueryHandler(choosing_more_dates_cont, pattern='^back$'),
                     CallbackQueryHandler(indicate_more, pattern='^forward$')
                     ],
                 2: [
