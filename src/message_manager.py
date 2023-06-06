@@ -128,6 +128,10 @@ class KaypohMessage(MessageObject, TrainingEventManager):
             self.add_new_record()
 
     def update_message(self):
+        """
+        edit the message of the intended recipient
+        returns True if sucessful else False
+        """
         bot_messenger = Bot(token=self.bot_token)
         try:
             bot_messenger.edit_message_text(
@@ -137,9 +141,10 @@ class KaypohMessage(MessageObject, TrainingEventManager):
                 parse_mode='html'
             )
         except BadRequest:
-            return "message not changed"
+            return False
         except Unauthorized:
-            return "no such chat found"
+            return False
+        return True
 
 
 class KaypohMessageHandler(KaypohMessage):
@@ -165,13 +170,18 @@ class KaypohMessageHandler(KaypohMessage):
 
         return len(self.records) if self.records else 0
 
-
     def update_all_message_instances(self):
         """
         update all instances of kaypoh messages
         """
         self.get_records()
+        success = 0
+        failed = 0
         for row in self.records:
             self.chat_id = row['player_id']
             self.message_id = row['message_id']
-            self.update_message()
+            if self.update_message():
+                success += 1
+            else:
+                failed += 1
+        return success, failed

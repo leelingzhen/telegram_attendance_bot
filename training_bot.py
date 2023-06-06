@@ -326,14 +326,17 @@ def update_kaypoh_messages(context: CallbackContext):
     logger.info("intitiating job queue to update kaypoh messages....")
     event_instance = context.job.context
     message_handler = KaypohMessageHandler(event_instance.id)
-    message_handler.update_all_message_instances()
+    success, failed = message_handler.update_all_message_instances()
     n_records = message_handler.n_records()
-    logger.info("completed job queue updating messages for %d records", n_records)
+    logger.info(
+            "completed job queue updating messages for %d records: (%d successful, %d failed)",
+            n_records, success, failed
+            )
 
 
 @secure(access=4)
 @send_typing_action
-def choosing_more_dates(update:Update, context: CallbackContext) -> int:
+def choosing_more_dates(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     helpers.refresh_player_profiles(update, context)
 
