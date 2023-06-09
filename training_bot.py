@@ -538,13 +538,10 @@ def events(update: Update, context: CallbackContext) -> None:
     text = ""
     for key in dict_date:
         # no registered dates of this category
-        if dict_date[key] == list():
-            continue
-        else:
-            text += f"<u>{key}</u>\n"
-            for event_date in dict_date[key]:
-                text += event_date.strftime('%d %b, %a @ %-I:%M%p') + "\n"
-            text += '\n'
+        text += f"<u>{key}</u>\n"
+        for event_date in dict_date[key]:
+            text += event_date.strftime('%d %b, %a @ %-I:%M%p') + "\n"
+        text += '\n'
 
     update.message.reply_text(
             f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿",

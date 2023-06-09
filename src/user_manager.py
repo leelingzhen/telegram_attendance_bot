@@ -199,21 +199,15 @@ class UserManager:
                               (self.id, event_id, 1, self.access)
                               ).fetchall()
             # sorting by categories
-            if data is None:
-                return dict()
-
-            dict_date = {
-                "Field Training": list(),
-                "Scrim": list(),
-                "Hardcourt/Track": list(),
-                "Gym/Pod": list(),
-                "Cohesion": list()
-            }
+            dict_date = {}
 
             for row_obj in data:
+                event_type = row_obj["event_type"]
+                if event_type not in dict_date:
+                    dict_date[event_type] = list()
+
                 event_date = datetime.strptime(
                     str(row_obj["id"]), '%Y%m%d%H%M')
-                event_type = row_obj["event_type"]
                 dict_date[event_type].append(event_date)
 
         return dict_date
