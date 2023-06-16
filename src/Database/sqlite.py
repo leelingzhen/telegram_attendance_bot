@@ -54,7 +54,6 @@ class Sqlite:
 
         return event_data
 
-
     def get_attendance_members(
             self,
             event_id: int,
