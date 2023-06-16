@@ -34,6 +34,27 @@ class Sqlite:
         cls = namedtuple("Row", fields)
         return cls._make(row)
 
+    def get_user_access(self, user_id):
+        """
+        get the access control of the user
+        """
+        access = self.cur.execute(
+            "SELECT control_id FROM access_control WHERE player_id = ?", (user_id,)).fetchone()
+        if not access:
+            return 0
+        return access.control_id
+
+    def get_future_events(self, event_id, access):
+        """
+        get event records which are greater than event_id
+        returns sqlite3
+        """
+        query = self.read_query('future_events.sql')
+        event_data = self.cur.execute(query, (event_id, access)).fetchall()
+
+        return event_data
+
+
     def get_attendance_members(
             self,
             event_id: int,
