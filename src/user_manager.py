@@ -59,9 +59,9 @@ class UserManager:
 
     def get_exisiting_name(self, name):
         user_data = self.db.get_user_profile(
-                user_id=self.id,
-                name=name
-                )
+            user_id=self.id,
+            name=name
+        )
         if user_data:
             return "@" + user_data['telegram_user']
         return None
@@ -84,7 +84,8 @@ class UserManager:
         data = (self.name, self.gender, self.id)
         db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
         data = (1, self.id)
-        db.execute('UPDATE access_control SET control_id=? WHERE player_id = ?', data)
+        db.execute(
+            'UPDATE access_control SET control_id=? WHERE player_id = ?', data)
         db.commit()
 
     def retrieve_user_data(self) -> list:
@@ -163,6 +164,10 @@ class UserManager:
         if from_date == 0:
             from_date = date.today()
         event_id = from_date.strftime('%Y%m%d%H%M')
+        event_data = self.db.get_future_events(
+            event_id=event_id,
+            access=self.access
+        )
 
         with sqlite3.connect(CONFIG['database']) as db:
             db.row_factory = sqlite3.Row

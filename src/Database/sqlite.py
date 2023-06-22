@@ -38,7 +38,7 @@ class Sqlite:
 
 class SqliteUserManager(Sqlite):
     """
-    sqlite3 connector for usermanager methods
+    sqlite3 connector for User Manager methods
     """
 
     def __init__(self):
