@@ -1,4 +1,4 @@
-from src.Database.sqlite import Sqlite
+from src.Database.sqlite import Sqlite, SqliteUserManager
 import unittest
 import os
 import sqlite3
@@ -19,7 +19,7 @@ class TestUserManager(unittest.TestCase):
         self.true_con.row_factory = sqlite3.Row
         self.true_db = self.true_con.cursor()
 
-        self.db = Sqlite()
+        self.db = SqliteUserManager()
 
     def test_read_query(self):
         test_read = self.db.read_query('members_attendance.sql')
@@ -45,14 +45,13 @@ class TestUserManager(unittest.TestCase):
         user_data = self.db.get_user_profile(user_id=1234567)
         self.assertEqual(user_data['name'], "Jacob Jason",
                          "should query Jacob Jason test user")
+
     def test_get_user_profile_1_wrong_kwarg(self):
         user_data = self.db.get_user_profile(
             user_id=0,
         )
         self.assertIsNone(
             user_data, 'no such record should exist for user_id = 0')
-
-
 
     def test_get_user_profile_2_correct_kwarg(self):
         user_data = self.db.get_user_profile(

@@ -5,7 +5,7 @@ import json
 
 from datetime import date, datetime
 
-from src.Database.sqlite import Sqlite
+from src.Database.sqlite import SqliteUserManager
 from telegram.bot import Bot
 from telegram.error import Unauthorized, BadRequest
 import telegram.message
@@ -35,7 +35,7 @@ class UserManager:
         intialise user from telegram message context
         """
         # importing connector
-        self.db = Sqlite()
+        self.db = SqliteUserManager()
 
         self.username = user['username']
         self.id = user['id']

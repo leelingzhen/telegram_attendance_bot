@@ -35,6 +35,16 @@ class Sqlite:
         cls = namedtuple("Row", fields)
         return cls._make(row)
 
+
+class SqliteUserManager(Sqlite):
+    """
+    sqlite3 connector for usermanager methods
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    # QUERYING
     def get_user_profile(self, **kwargs):
         """
         get all the player data from the db
@@ -61,9 +71,9 @@ class Sqlite:
 
         if len(kwargs) == 2:
             user_data = self.cur.execute(
-                    "SELECT * FROM players WHERE id = ? AND name = ?",
-                    (kwargs['user_id'], kwargs['name'])
-                    ).fetchone()
+                "SELECT * FROM players WHERE id = ? AND name = ?",
+                (kwargs['user_id'], kwargs['name'])
+            ).fetchone()
 
         return user_data
 
