@@ -119,17 +119,8 @@ class UserManager:
         """
         updates the database when a new user uses the bot
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.execute("BEGIN TRANSACTION")
-            data = [self.id, self.username]
-            db.execute(
-                "INSERT INTO players(id, telegram_user) VALUES (?, ?)", data)
-
-            # insert into access control
-            data = [self.id, 0]
-            db.execute(
-                "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", data)
-            db.commit()
+        self.db.insert_user(id=self.id, telegram_user=self.username)
+        self.db.insert_new_access_record(id=self.id)
         return None
 
     def get_user_access(self) -> int:

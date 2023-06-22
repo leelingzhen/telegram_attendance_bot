@@ -73,6 +73,25 @@ class TestUserManager(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             self.db.get_user_profile()
 
+    # testing adding
+
+    def test_insert_user(self):
+        self.db.insert_user(568910, 'test_user')
+        new_user_record = self.true_db.execute(
+            "SELECT * FROM players WHERE id = 568910")
+        self.true_db.execute("DELETE FROM players WHERE id = 568910")
+        self.true_con.commit()
+        self.assertIsNotNone(new_user_record, "adding to db failed")
+
+    def test_adding_new_access_record(self):
+        self.db.insert_new_access_record(568910)
+        access_control = self.true_db.execute(
+                "SELECT * FROM access_control WHERE player_id = 568910"
+                )
+        self.true_db.execute('DELETE FROM access_control WHERE player_id = 568910')
+        self.true_con.commit()
+        self.assertIsNotNone(access_control)
+
     # def get_future_events(self):
     #     event_data = self.get_future_events()
 

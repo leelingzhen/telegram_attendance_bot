@@ -122,3 +122,27 @@ class SqliteUserManager(Sqlite):
         player_data = self.cur.execute(query, data).fetchall()
 
         return player_data
+
+    # INSERTING NEW RECORDS
+
+    def insert_user(self, id, telegram_user):
+        """
+        inserts a new user record
+        """
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO players(id, telegram_user) VALUES (?, ?)",
+            (id, telegram_user)
+        )
+        self.con.commit()
+
+    def insert_new_access_record(self, id):
+        """
+        insert a new record of access control
+        """
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)",
+            (id, 0)
+            )
+        self.con.commit()
