@@ -155,10 +155,6 @@ class UserManager:
             access=self.access
         )
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event_data = db.execute(
-                "SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
         return event_data
 
     def attending_events(self, from_date: datetime = None) -> dict:
