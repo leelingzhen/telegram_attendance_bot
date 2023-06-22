@@ -5,6 +5,7 @@ import json
 
 from datetime import date, datetime
 
+from src.Database.sqlite import Sqlite
 from telegram.bot import Bot
 from telegram.error import Unauthorized, BadRequest
 import telegram.message
@@ -33,6 +34,9 @@ class UserManager:
         """
         intialise user from telegram message context
         """
+        # importing connector
+        self.db = Sqlite()
+
         self.username = user['username']
         self.id = user['id']
         self.first_name = user['first_name']
@@ -54,13 +58,12 @@ class UserManager:
         self.notification = notification
 
     def get_exisiting_name(self, name):
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = (name, self.id)
-            similar_names = db.execute(
-                "SELECT telegram_user FROM players WHERE name = ? AND id != ?", data).fetchone()
-        if similar_names:
-            return "@" + similar_names['telegram_user']
+        user_data = self.db.get_user_profile(
+                user_id=self.id,
+                name=name
+                )
+        if user_data:
+            return "@" + user_data['telegram_user']
         return None
 
     def set_name(self, name):
@@ -90,24 +93,18 @@ class UserManager:
         returns user profiles in a list
 
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            user_profile = db.execute(
-                "SELECT * FROM players WHERE id = ?",
-                (self.id,)
-            ).fetchone()
+        user_profile = self.db.get_user_profile(user_id=self.id)
+        if user_profile is None:
+            self.cache_new_user()
 
-            if user_profile is None:
-                self.cache_new_user()
+        self.name = user_profile['name']
+        self.telegram_user = user_profile['telegram_user']
+        self.hidden = user_profile['hidden']
+        self.gender = user_profile['gender']
+        self.notication = user_profile['notification']
+        self.language = user_profile['language_pack']
 
-            self.name = user_profile['name']
-            self.telegram_user = user_profile['telegram_user']
-            self.hidden = user_profile['hidden']
-            self.gender = user_profile['gender']
-            self.notication = user_profile['notification']
-            self.language = user_profile['language_pack']
-
-            return user_profile
+        return user_profile
 
     def username_tally(self):
         """
@@ -139,13 +136,9 @@ class UserManager:
         get the access of the player
         returns an int
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            access = db.execute(
-                "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()
+        access = self.db.get_user_access(self.id)
 
-        if not access:
-            return 0
-        return access[0]
+        return access
 
     def parse_access_control_description(self, access=None):
         if self.access is None:

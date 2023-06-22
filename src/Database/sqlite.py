@@ -8,10 +8,11 @@ class Sqlite:
     sqlite3 DB connector
     """
 
-    def __init__(self):
+    def __init__(self, testing=False):
 
         self.con = sqlite3.connect(os.path.join('resources', 'attendance.db'))
-        self.con.row_factory = self.namedtuple_factory
+        # self.con.row_factory = self.namedtuple_factory
+        self.con.row_factory = sqlite3.Row
         self.cur = self.con.cursor()
 
     def read_query(self, q_file: str) -> str:
@@ -34,15 +35,48 @@ class Sqlite:
         cls = namedtuple("Row", fields)
         return cls._make(row)
 
+    def get_user_profile(self, **kwargs):
+        """
+        get all the player data from the db
+
+        params = user_id, name
+        returns sqlite3.Row, fields:
+            name
+            telegram_user
+            hidden
+            gender
+            notification
+            language
+        """
+        # TODO build some custom errors
+        if 'user_id' not in kwargs:
+            raise SyntaxError
+
+        if len(kwargs) == 1:
+
+            user_data = self.cur.execute(
+                "SELECT * FROM players WHERE id = ?",
+                (kwargs['user_id'], )
+            ).fetchone()
+
+        if len(kwargs) == 2:
+            user_data = self.cur.execute(
+                    "SELECT * FROM players WHERE id = ? AND name = ?",
+                    (kwargs['user_id'], kwargs['name'])
+                    ).fetchone()
+
+        return user_data
+
     def get_user_access(self, user_id):
         """
         get the access control of the user
         """
         access = self.cur.execute(
-            "SELECT control_id FROM access_control WHERE player_id = ?", (user_id,)).fetchone()
+            "SELECT control_id FROM access_control WHERE player_id = ?",
+            (user_id,)).fetchone()
         if not access:
             return 0
-        return access.control_id
+        return access['control_id']
 
     def get_future_events(self, event_id, access):
         """
