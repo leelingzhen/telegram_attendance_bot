@@ -123,6 +123,13 @@ class SqliteUserManager(Sqlite):
 
         return player_data
 
+    def get_access_control_description(self, access):
+        position = self.cur.execute(
+            "SELECT * FROM access_control_description WHERE id = ?",
+            (access, )
+        ).fetchone()
+        return position["description"]
+
     # INSERTING NEW RECORDS
 
     def insert_user(self, id, telegram_user):
@@ -144,5 +151,5 @@ class SqliteUserManager(Sqlite):
         self.cur.execute(
             "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)",
             (id, 0)
-            )
+        )
         self.con.commit()

@@ -86,11 +86,17 @@ class TestUserManager(unittest.TestCase):
     def test_adding_new_access_record(self):
         self.db.insert_new_access_record(568910)
         access_control = self.true_db.execute(
-                "SELECT * FROM access_control WHERE player_id = 568910"
-                )
-        self.true_db.execute('DELETE FROM access_control WHERE player_id = 568910')
+            "SELECT * FROM access_control WHERE player_id = 568910"
+        )
+        self.true_db.execute(
+            'DELETE FROM access_control WHERE player_id = 568910')
         self.true_con.commit()
         self.assertIsNotNone(access_control)
+
+    def test_get_access_control_description(self):
+        position = self.db.get_access_control_description(2)
+        self.assertEqual(position, "Guest",
+                         "need to return guest for access = 2")
 
     # def get_future_events(self):
     #     event_data = self.get_future_events()

@@ -27,6 +27,7 @@ class TestUserManager(unittest.TestCase):
         self.cur = self.con.cursor()
 
         self.user_instance = UserManager(self.user)
+        # self.user_instance.access = 2
 
     def test_username_correct(self):
         self.assertEqual(self.user_instance.username,
@@ -71,6 +72,11 @@ class TestUserManager(unittest.TestCase):
         self.cur.execute("DELETE FROM access_control WHERE player_id = 568910")
         self.con.commit()
         self.assertIsNotNone(check_record, "adding to db failure")
+
+    def test_parse_access_control_description(self):
+        position = self.user_instance.parse_access_control_description()
+        self.assertEqual(position, "Member",
+                         "needs to return Member for access = 4")
 
 
 if __name__ == "__main__":

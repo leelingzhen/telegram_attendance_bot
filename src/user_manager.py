@@ -138,13 +138,8 @@ class UserManager:
         if access is None:
             access = self.access
 
-        with sqlite3.connect(CONFIG["database"]) as db:
-            position = db.execute(
-                "SELECT * FROM access_control_description WHERE id = ?", (
-                    access, )
-            ).fetchone()[1]
-
-            return position
+        position = self.db.get_access_control_description(access)
+        return position
 
     def get_event_dates(self,
                         from_date: date = 0) -> sqlite3.Row:
