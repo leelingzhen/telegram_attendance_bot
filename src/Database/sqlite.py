@@ -85,7 +85,20 @@ class UsersTableSqlite(Sqlite):
 
     def get_user_by_id(self, id: int, name=None):
         """
-        gets the user by id
+        Retrieve user information based on their ID.
+
+        Args:
+            self: The current instance of the class.
+            id (int): The user's ID.
+            name (str, optional): The user's name. Defaults to None.
+
+        Returns:
+            user_data (tuple or None): A tuple containing the user's data retrieved from the database.
+                                      Returns None if no user is found.
+
+        Raises:
+            None
+
         """
         query = "SELECT * FROM players WHERE {columns}"
 
@@ -241,8 +254,6 @@ class EventsTableSqlite(Sqlite):
         )
         self.con.commit()
 
-    # QUERYING
-
     def get_event_by_id(self, id: int):
         """
         gets event by id
@@ -253,6 +264,10 @@ class EventsTableSqlite(Sqlite):
 
         return event_data
 
+    # TODO
+    def update_event(self):
+        pass
+
     def delete_event_by_id(self, id):
         self.cur.execute("BEGIN TRANSACTION")
         self.cur.execute("DELETE FROM events WHERE id = ?", (id, ))
@@ -260,11 +275,45 @@ class EventsTableSqlite(Sqlite):
 
 
 class AttendanceTableSqlite(Sqlite):
+    """
+    CRUD operations for attendance
+    """
+
     def __init__(self):
         super().__init__()
 
+    def insert_attendance(self,
+                          user_id: int,
+                          event_id: int,
+                          status: int,
+                          reason: str
+                          ):
+        """
+        Insert attendance record into the database.
+
+        Args:
+            self: The current instance of the class.
+            user_id (int): The ID of the user attending the event.
+            event_id (int): The ID of the event.
+            status (int): The attendance status code.
+            reason (str): The reason for the attendance.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
+
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            'INSERT INTO attendance VALUES(?, ?, ?, ?)',
+            (event_id, user_id, status, reason)
+        )
+        self.con.commit()
+
     def get_attendance(self,
-                       player_id: int,
+                       user_id: int,
                        event_id: int
                        ):
         """
@@ -277,10 +326,41 @@ class AttendanceTableSqlite(Sqlite):
         """
         attendance_data = self.cur.execute(
             "SELECT * FROM attendance WHERE player_id = ? AND event_id = ?",
-            (player_id, event_id)
+            (user_id, event_id)
         ).fetchone()
 
         return attendance_data
+
+    def update_attendance(
+            self,
+            user_id: int,
+            event_id: int,
+            status: int,
+            reason: str
+    ):
+        """
+        Update attendance record in the database.
+        only status and reason can be updated
+
+        Args:
+            self: The current instance of the class.
+            player_id (int): The ID of the player.
+            event_id (int): The ID of the event.
+            status (int): The new attendance status code.
+            reason (str): The new reason for the attendance.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            'UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?',
+            (status, reason, event_id, user_id)
+        )
+        self.con.commit()
 
     def delete_attendance(self, user_id, event_id):
         self.cur.execute("BEGIN TRANSACTION")
@@ -295,7 +375,15 @@ class AccessTableSqlite(Sqlite):
     def __init__(self):
         super().__init__()
 
-    def get_user_access(self, user_id):
+    def insert_access(self, user_id: int, access: int):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO access_control VALUES (?, ?)",
+            (user_id, access)
+        )
+        self.con.commit()
+
+    def get_access(self, user_id):
         """
         get access of a user
 
@@ -304,11 +392,42 @@ class AccessTableSqlite(Sqlite):
             control_id
         """
         access_data = self.cur.execute(
-            "SELECT * FROM access_control WHERE player_id = ?", (user_id, )).fetchone()
+            "SELECT * FROM access_control WHERE player_id = ?",
+            (user_id, )).fetchone()
 
         return access_data
 
-    # DELETING
+    def get_position(self, access) -> str:
+        """
+        get the position of an access
+        """
+        position = self.cur.execute(
+            "SELECT * FROM access_control_description WHERE id = ?", (access, )
+        ).fetchone()
+        return position['description']
+
+    def update_access(self, user_id, new_access):
+        """
+        Update access record in the database.
+        only access can be updated
+
+        Args:
+            user_id (int): The ID of the player.
+            new_access (int): the new access of the target user.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
+
+        self.cur.execute('BEGIN TRANSACTION')
+        self.cur.execute(
+            "UPDATE access_control SET control_id = ? WHERE player_id = ?",
+            (new_access, user_id)
+        )
+        self.con.commit()
 
     def delete_user_access(self, id):
         self.cur.execute("BEGIN TRANSACTION")
@@ -378,33 +497,31 @@ class SqliteUserManager(
 
         return player_data
 
-    def get_access_control_description(self, access):
-        position = self.cur.execute(
-            "SELECT * FROM access_control_description WHERE id = ?",
-            (access, )
-        ).fetchone()
-        return position["description"]
-
-    # INSERTING NEW RECORDS
-
-    # def insert_user(self, id, telegram_user):
-    #     """
-    #     inserts a new user record
-    #     """
-    #     self.cur.execute("BEGIN TRANSACTION")
-    #     self.cur.execute(
-    #         "INSERT INTO players(id, telegram_user) VALUES (?, ?)",
-    #         (id, telegram_user)
-    #     )
-    #     self.con.commit()
-
-    def insert_new_access_record(self, id):
+    def get_attending_events(
+        self,
+        user_id: int,
+        event_id: int,
+        access: int
+    ):
         """
-        insert a new record of access control
+        Retrieve a list of events that the user is attending.
+
+        Args:
+            self: The current instance of the class.
+            user_id (int): The ID of the user.
+            event_id (int): The minimum event ID to filter the results.
+            access (int): The access control level.
+
+        Returns:
+            data (list): A list of tuples containing the event IDs and types that match the specified criteria.
+
+        Raises:
+            None
         """
-        self.cur.execute("BEGIN TRANSACTION")
-        self.cur.execute(
-            "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)",
-            (id, 0)
-        )
-        self.con.commit()
+        query = self.read_query("user_attending_events.sql")
+        data = self.cur.execute(
+            query,
+            (user_id, event_id, 1, access)
+        ).fetchall()
+
+        return data

@@ -17,7 +17,6 @@ class TestUserManager(unittest.TestCase):
             'is_bot': False,
         }
 
-        
         self.new_user = {
             'username': "new_user",
             'id': 568910,
@@ -71,29 +70,13 @@ class TestUserManager(unittest.TestCase):
 
         self.assertDictEqual(player_data, dict(updated_player_data))
 
-        
-
     def test_cache_user_player_record(self):
         new_user = UserManager(self.new_user)
         new_user.cache_new_user()
-        check_record = self.cur.execute(
-            "SELECT * FROM players WHERE id = 568910"
-        ).fetchone()
+        check_record = self.db.get_user_by_id(568910)
 
-        self.cur.execute("DELETE FROM players WHERE id = 568910")
-        self.cur.execute("DELETE FROM access_control WHERE player_id = 568910")
-        self.con.commit()
-        self.assertIsNotNone(check_record, "adding to db failure")
-
-    def test_cache_user_access_control(self):
-        new_user = UserManager(self.new_user)
-        new_user.cache_new_user()
-        check_record = self.cur.execute(
-            "SELECT * FROM access_control WHERE player_id = 568910"
-        ).fetchone()
-        self.cur.execute("DELETE FROM players WHERE id = 568910")
-        self.cur.execute("DELETE FROM access_control WHERE player_id = 568910")
-        self.con.commit()
+        self.db.delete_user_by_id(568910)
+        self.db.delete_user_access(568910)
         self.assertIsNotNone(check_record, "adding to db failure")
 
     def test_parse_access_control_description(self):

@@ -82,13 +82,7 @@ class UserManager:
 
     def push_new_user(self):
         self.db.update_user(id=self.id, name=self.name, gender=self.gender)
-        db.execute("BEGIN TRANSACTION")
-        # data = (self.name, self.gender, self.id)
-        # db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
-        data = (1, self.id)
-        db.execute(
-            'UPDATE access_control SET control_id=? WHERE player_id = ?', data)
-        db.commit()
+        self.db.update_access(user_id=self.id, new_access=1)
 
     def retrieve_user_data(self) -> list:
         """
@@ -122,7 +116,7 @@ class UserManager:
         updates the database when a new user uses the bot
         """
         self.db.insert_user(id=self.id, telegram_user=self.username)
-        self.db.insert_new_access_record(id=self.id)
+        self.db.insert_access(user_id=self.id, access=0)
         return None
 
     def get_user_access(self) -> int:
@@ -130,9 +124,10 @@ class UserManager:
         get the access of the player
         returns an int
         """
-        access = self.db.get_user_access(self.id)
-
-        return access
+        access = self.db.get_access(self.id)
+        if not access:
+            return 0
+        return access['control_id']
 
     def parse_access_control_description(self, access=None):
         if self.access is None:
@@ -140,7 +135,7 @@ class UserManager:
         if access is None:
             access = self.access
 
-        position = self.db.get_access_control_description(access)
+        position = self.db.get_position(access)
         return position
 
     def get_event_dates(self,
@@ -167,30 +162,23 @@ class UserManager:
             from_date = date.today()
         event_id = from_date.strftime('%Y%m%d%H%M')
 
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute("""
-                    SELECT id, event_type FROM events
-                    JOIN attendance ON events.id = attendance.event_id
-                    WHERE attendance.player_id = ?
-                    AND attendance.event_id >= ?
-                    AND attendance.status = ?
-                    AND events.access_control <= ?
-                    ORDER BY id
-                                          """,
-                              (self.id, event_id, 1, self.access)
-                              ).fetchall()
-            # sorting by categories
-            dict_date = {}
+        data = self.db.get_attending_events(
+            user_id=self.id,
+            event_id=event_id,
+            access=self.access
+        )
 
-            for row_obj in data:
-                event_type = row_obj["event_type"]
-                if event_type not in dict_date:
-                    dict_date[event_type] = list()
+        # sorting by categories
+        dict_date = {}
 
-                event_date = datetime.strptime(
-                    str(row_obj["id"]), '%Y%m%d%H%M')
-                dict_date[event_type].append(event_date)
+        for row_obj in data:
+            event_type = row_obj["event_type"]
+            if event_type not in dict_date:
+                dict_date[event_type] = list()
+
+            event_date = datetime.strptime(
+                str(row_obj["id"]), '%Y%m%d%H%M')
+            dict_date[event_type].append(event_date)
 
         return dict_date
 

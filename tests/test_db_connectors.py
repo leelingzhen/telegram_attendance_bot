@@ -127,6 +127,48 @@ class TestEventsTableSqlite(unittest.TestCase):
         self.assertIsNotNone(event_data)
 
 
+class TestAttendanceTableSqlite(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        self.user = {
+            'username': "jacobjason",
+            'id': 1234567,
+            'first_name': 'Jacob Jason',
+            'is_bot': False,
+        }
+
+        self.db = src.Database.sqlite.AttendanceTableSqlite()
+
+    def test_attendance_record_status(self):
+        attendance = self.db.get_attendance(user_id=1234567, event_id=12345676)
+        self.assertEqual(attendance['status'], 1)
+
+    def test_attendance_record_reason(self):
+        attendance = self.db.get_attendance(user_id=1234567, event_id=12345678)
+        self.assertEqual(attendance['reason'], 'test_reason')
+
+    def test_insert_attendance_record(self):
+        self.db.insert_attendance(
+            user_id=111,
+            event_id=111,
+            status=1,
+            reason="test"
+        )
+        attendance = self.db.get_attendance(user_id=111, event_id=111)
+        self.db.delete_attendance(user_id=111, event_id=111)
+        deleted = self.db.get_attendance(user_id=111, event_id=111)
+        self.assertIsNotNone(attendance)
+        self.assertIsNone(deleted)
+
+    def test_update_attendance_record(self):
+        self.db.update_attendance(
+            user_id=1234567, event_id=12345676, status=0, reason=None)
+        attendance = self.db.get_attendance(user_id=1234567, event_id=12345676)
+        self.db.update_attendance(
+            user_id=1234567, event_id=12345676, status=1, reason=None)
+        self.assertEqual(attendance['status'], 0)
+
+
 class TestSqliteUserManager(unittest.TestCase):
 
     @classmethod
@@ -147,7 +189,7 @@ class TestSqliteUserManager(unittest.TestCase):
 
     def test_read_attendance(self):
         attendance = self.db.get_attendance(
-            player_id=1234567, event_id=12345678)
+            user_id=1234567, event_id=12345678)
         self.assertIsNotNone(attendance)
 
     def test_get_user_access_exists(self):
@@ -164,68 +206,11 @@ class TestSqliteUserManager(unittest.TestCase):
         self.assertEqual(
             access, 0, "needs to return 0 when no access level found")
 
-    def test_get_user_profile_1_correct_kwarg(self):
-        user_data = self.db.get_user_profile(user_id=1234567)
-        self.assertEqual(user_data['name'], "Jacob Jason",
-                         "should query Jacob Jason test user")
-
-    def test_get_user_profile_1_wrong_kwarg(self):
-        user_data = self.db.get_user_profile(
-            user_id=0,
-        )
-        self.assertIsNone(
-            user_data, 'no such record should exist for user_id = 0')
-
-    def test_get_user_profile_2_correct_kwarg(self):
-        user_data = self.db.get_user_profile(
-            user_id=1234567,
-            name="Jacob Jason"
-        )
-        self.assertEqual(user_data['telegram_user'], 'jacobjason')
-
-    def test_get_user_profile_2_wrong_kwarg(self):
-        user_data = self.db.get_user_profile(
-            user_id=1234567,
-            name="Lee Ling Zhen"
-        )
-        self.assertIsNone(
-            user_data, 'no such record should exist for given kwargs')
-
-    def test_get_user_profiles_no_kwarg(self):
-
-        with self.assertRaises(SyntaxError):
-            self.db.get_user_profile()
-
-    # testing adding
-
-    # def test_insert_user(self):
-    #     self.db.insert_user(568910, 'test_user')
-    #     new_user_record = self.true_db.execute(
-    #         "SELECT * FROM players WHERE id = 568910")
-    #     self.true_db.execute("DELETE FROM players WHERE id = 568910")
-    #     self.true_con.commit()
-    #     self.assertIsNotNone(new_user_record, "adding to db failed")
-    #
-    def test_adding_new_access_record(self):
-        self.db.insert_new_access_record(568910)
-        access_control = self.true_db.execute(
-            "SELECT * FROM access_control WHERE player_id = 568910"
-        )
-        self.true_db.execute(
-            'DELETE FROM access_control WHERE player_id = 568910')
-        self.true_con.commit()
-        self.assertIsNotNone(access_control)
-
-    def test_get_access_control_description(self):
-        position = self.db.get_access_control_description(2)
-        self.assertEqual(position, "Guest",
-                         "need to return guest for access = 2")
-
-    # def get_future_events(self):
-    #     event_data = self.get_future_events()
-
-    # def test_get_attendance_members(self):
-    #     self.db.get_attendance_members( )
+    def test_get_attending_events(self):
+        data = self.db.get_attending_events(
+            user_id=1234567, event_id=0, access=4)
+        self.assertEqual(
+            len(data), 2, "there are only 2 events that user_id 1234567 is attending")
 
 
 if __name__ == "__main__":
