@@ -3,6 +3,7 @@ import sqlite3
 import os
 
 from src.user_manager import UserManager
+import src.Database.sqlite
 
 
 class TestUserManager(unittest.TestCase):
@@ -15,6 +16,8 @@ class TestUserManager(unittest.TestCase):
             'first_name': 'Jacob Jason',
             'is_bot': False,
         }
+
+        
         self.new_user = {
             'username': "new_user",
             'id': 568910,
@@ -25,6 +28,8 @@ class TestUserManager(unittest.TestCase):
             os.path.join('resources', 'attendance.db'))
         self.con.row_factory = sqlite3.Row
         self.cur = self.con.cursor()
+
+        self.db = src.Database.sqlite.SqliteUserManager()
 
         self.user_instance = UserManager(self.user)
         # self.user_instance.access = 2
@@ -49,6 +54,24 @@ class TestUserManager(unittest.TestCase):
     def test_get_existing_name_that_dont_exists(self):
         user_name = self.user_instance.get_exisiting_name(name="xyz")
         self.assertIsNone(user_name, 'there shouldnt be a name with xyz')
+
+    def test_push_update_user(self):
+        player_data = dict(self.db.get_user_by_id(1234567))
+        player_data['name'] = 'yacob'
+        player_data['notification'] = 0
+
+        self.user_instance.name = 'yacob'
+        self.user_instance.notification = 0
+        self.user_instance.push_update_user()
+        updated_player_data = self.db.get_user_by_id(1234567)
+
+        self.user_instance.name = "Jacob Jason"
+        self.user_instance.notification = 1
+        self.user_instance.push_update_user()
+
+        self.assertDictEqual(player_data, dict(updated_player_data))
+
+        
 
     def test_cache_user_player_record(self):
         new_user = UserManager(self.new_user)

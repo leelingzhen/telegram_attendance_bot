@@ -74,11 +74,11 @@ class UserManager:
         self.telegram_user = self.username
 
     def push_update_user(self):
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.execute("BEGIN TRANSACTION")
-            db.execute("UPDATE players SET name = ?, notification = ? WHERE id = ?",
-                       (self.name, self.notification, self.id))
-            db.commit()
+        self.db.update_user(
+                id=self.id,
+                name=self.name,
+                notification=self.notification
+                )
 
     def push_new_user(self):
         db.execute("BEGIN TRANSACTION")
