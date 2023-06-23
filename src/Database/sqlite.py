@@ -97,6 +97,74 @@ class UsersTableSqlite(Sqlite):
         self.cur.execute("DELETE FROM players WHERE id = ?", (id, ))
         self.con.commit()
 
+    def update_user(self,
+                    id: int,
+                    name: str = None,
+                    telegram_user: str = None,
+                    gender: str = None,
+                    notification: int = None,
+                    language_pack: str = None,
+                    hidden: int = None,
+                    ):
+        """
+        Update user by ID.
+
+        Args:
+            self: The current instance of the class.
+            id (int): The user's ID.
+            name (str, optional): The user's name. Defaults to None.
+            telegram_user (str, optional): The user's Telegram username. Defaults to None.
+            gender (str, optional): The user's gender. Defaults to None.
+            notification (int, optional): The user's notification preference. Defaults to None.
+            language_pack (str, optional): The user's language pack. Defaults to None.
+            hidden (int, optional): Flag indicating if the user is hidden. Defaults to None.
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        """
+        query = self.read_query("update_user.sql")
+        update_values = []
+        update_columns = []
+
+        if name is not None:
+            update_values.append(name)
+            update_columns.append("name = ?")
+
+        if telegram_user is not None:
+            update_values.append(telegram_user)
+            update_columns.append("telegram_user = ?")
+
+        if gender is not None:
+            update_values.append(gender)
+            update_columns.append("gender = ?")
+
+        if notification is not None:
+            update_values.append(notification)
+            update_columns.append("notification = ?")
+
+        if language_pack is not None:
+            update_values.append(language_pack)
+            update_columns.append("language_pack = ?")
+
+        if hidden is not None:
+            update_values.append(hidden)
+            update_columns.append("hidden = ?")
+
+        if not update_values:
+            return  # No fields to update
+
+        update_values.append(id)
+        update_columns = ", ".join(update_columns)
+
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(query.format(
+            update_columns=update_columns), tuple(update_values))
+        self.con.commit()
+
 
 class EventsTableSqlite(Sqlite):
     def __init__(self):
@@ -243,7 +311,7 @@ class SqliteUserManager(
         EventsTableSqlite,
         AccessTableSqlite,
         AttendanceTableSqlite
-        ):
+):
     """
     sqlite3 connector for User Manager methods
     """
