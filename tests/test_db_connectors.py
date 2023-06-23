@@ -1,10 +1,35 @@
 from src.Database.sqlite import Sqlite, SqliteUserManager
+import src.Database.sqlite
 import unittest
 import os
 import sqlite3
 
+"""
+test_event_id = 12345678, 12345677, 12345676
+test_user_id = 1234567
 
-class TestUserManager(unittest.TestCase):
+"""
+
+
+class TestSqlite:
+    def setUpClass(self):
+        self.user = {
+            'username': "jacobjason",
+            'id': 1234567,
+            'first_name': 'Jacob Jason',
+            'is_bot': False,
+        }
+
+        self.db = src.Database.sqlite.Sqlite()
+
+    def test_read_query(self):
+        test_read = self.db.read_query('members_attendance.sql')
+        with open(os.path.join('src', 'Database', 'queries', 'members_attendance.sql')) as f:
+            query = f.read()
+        self.assertEqual(query, test_read, "not the same query")
+
+
+class TestSqliteUserManager(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
@@ -14,18 +39,55 @@ class TestUserManager(unittest.TestCase):
             'first_name': 'Jacob Jason',
             'is_bot': False,
         }
+
         self.true_con = sqlite3.connect(
             os.path.join('resources', 'attendance.db'))
         self.true_con.row_factory = sqlite3.Row
         self.true_db = self.true_con.cursor()
 
-        self.db = SqliteUserManager()
+        self.db = src.Database.sqlite.SqliteUserManager()
 
-    def test_read_query(self):
-        test_read = self.db.read_query('members_attendance.sql')
-        with open(os.path.join('src', 'Database', 'queries', 'members_attendance.sql')) as f:
-            query = f.read()
-        self.assertEqual(query, test_read, "not the same query")
+    def test_read_user(self):
+        player_data = self.db.get_user_by_id(self.user['id'])
+        self.assertIsNotNone(player_data)
+
+    def test_read_event(self):
+        event_data = self.db.get_event_by_id(12345678)
+        self.assertIsNotNone(event_data)
+
+    def test_read_attendance(self):
+        attendance = self.db.get_attendance(
+            player_id=1234567, event_id=12345678)
+        self.assertIsNotNone(attendance)
+
+    def test_insert_valid_user(self):
+        self.db.insert_user(
+            id=666,
+            telegram_user='testes',
+            name='Test Adding User',
+            gender='Male',
+        )
+        new_user = self.db.get_user_by_id(666)
+        self.assertIsNotNone(new_user)
+
+    def test_delete_user(self):
+        self.db.delete_user_by_id(666)
+        deleted_user = self.db.get_user_by_id(666)
+        self.assertIsNone(deleted_user)
+
+    def test_insert_cached_user(self):
+        self.db.insert_user(id=666, telegram_user='testes')
+        new_user = self.db.get_user_by_id(666)
+        self.db.delete_user_by_id(666)
+        self.assertIsNone(new_user['name'])
+
+    def test_insert_invalid_user_no_telegram_user(self):
+        with self.assertRaises(TypeError):
+            self.db.insert_user(1234)
+
+    def test_inser_invalid_user_only_no_id(self):
+        with self.assertRaises(TypeError):
+            self.db.insert_user(telegram_user="testing")
 
     def test_get_user_access_exists(self):
         real_access = self.true_db.execute(
@@ -75,14 +137,14 @@ class TestUserManager(unittest.TestCase):
 
     # testing adding
 
-    def test_insert_user(self):
-        self.db.insert_user(568910, 'test_user')
-        new_user_record = self.true_db.execute(
-            "SELECT * FROM players WHERE id = 568910")
-        self.true_db.execute("DELETE FROM players WHERE id = 568910")
-        self.true_con.commit()
-        self.assertIsNotNone(new_user_record, "adding to db failed")
-
+    # def test_insert_user(self):
+    #     self.db.insert_user(568910, 'test_user')
+    #     new_user_record = self.true_db.execute(
+    #         "SELECT * FROM players WHERE id = 568910")
+    #     self.true_db.execute("DELETE FROM players WHERE id = 568910")
+    #     self.true_con.commit()
+    #     self.assertIsNotNone(new_user_record, "adding to db failed")
+    #
     def test_adding_new_access_record(self):
         self.db.insert_new_access_record(568910)
         access_control = self.true_db.execute(

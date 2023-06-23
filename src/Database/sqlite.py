@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from collections import namedtuple
+from datetime import datetime, date
 
 
 class Sqlite:
@@ -36,7 +37,213 @@ class Sqlite:
         return cls._make(row)
 
 
-class SqliteUserManager(Sqlite):
+class UsersTableSqlite(Sqlite):
+    """
+    CRUD for Players Table
+    """
+
+    def __init__(self):
+        super().__init__()
+    # CREATING
+
+    def insert_user(
+        self,
+        id: int,
+        telegram_user: str,
+        name: str = None,
+        gender: str = None,  # Male or Female
+        notification: int = 1,
+        language_pack: str = 'default',
+        hidden: int = 0
+    ):
+        """
+        Inserts a user into the database.
+
+        Args:
+            self: The current instance of the class.
+            id (int): The user's ID.
+            telegram_user (str): The user's Telegram username.
+            name (str, optional): The user's name. Defaults to None.
+            gender (str, optional): The user's gender. Must be either "Male" or "Female". Defaults to None.
+            notification (int, optional): The user's notification preference. Defaults to None.
+            language_pack (str, optional): The user's language pack. Defaults to 'default'.
+            hidden (int, optional): Flag indicating if the user is hidden. Defaults to 0.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO players VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (id, name, telegram_user, gender,
+             notification, language_pack, hidden)
+        )
+        self.con.commit()
+
+    def get_user_by_id(self, id: int):
+        """
+        gets the user by id
+        """
+        user_data = self.cur.execute(
+            "SELECT * FROM players WHERE id = ?", (id, )).fetchone()
+
+        return user_data
+
+    def delete_user_by_id(self, id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute("DELETE FROM players WHERE id = ?", (id, ))
+        self.con.commit()
+
+
+class EventsTableSqlite(Sqlite):
+    def __init__(self):
+        super().__init__()
+
+    def insert_event(
+            self,
+            id: int,
+            event_type: str,
+            event_date: str,  # "%Y-%m-%d"
+            start_time: str,  # "%H:%M"
+            end_time: str,  # "%H:%M"
+            location: str,
+            access_control: int,
+            announcement: str = None
+    ):
+        """
+        Inserts an event into the database.
+
+        Args:
+            self: The current instance of the class.
+            id (int): The event's ID.
+            event_type (str): The type of the event.
+            event_date (str): The date of the event in the format "%Y-%m-%d".
+            start_time (str): The start time of the event in the format "%H:%M".
+            end_time (str): The end time of the event in the format "%H:%M".
+            location (str): The location of the event.
+            access_control (int): The access control level of the event.
+            announcement (str, optional): Additional announcement for the event. Defaults to None.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the event_date, start_time, or end_time does not match the specified format.
+
+        """
+        try:
+            datetime.strptime(event_date, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(
+                f"event_date: {event_date} format needs to be '%Y-%m-%d'")
+
+        try:
+            datetime.strptime(start_time, "%H:%M")
+        except ValueError:
+            raise ValueError(
+                f"start_time: {start_time} does not match '%H:%M"
+            )
+
+        try:
+            datetime.strptime(end_time, "%H:%M")
+        except ValueError:
+            raise ValueError(
+                f"start_time: {end_time} does not match '%H:%M"
+            )
+
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (id, event_type, event_date, start_time,
+             end_time, location, announcement, access_control)
+        )
+        self.con.commit()
+
+    # QUERYING
+
+    def get_event_by_id(self, id: int):
+        """
+        gets event by id
+        """
+        event_data = self.cur.execute(
+            "SELECT * FROM events WHERE id = ?", (id, )
+        ).fetchone()
+
+        return event_data
+
+    def delete_event_by_id(self, id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute("DELETE FROM events WHERE id = ?", (id, ))
+        self.con.commit()
+
+
+class AttendanceTableSqlite(Sqlite):
+    def __init__(self):
+        super().__init__()
+
+    def get_attendance(self,
+                       player_id: int,
+                       event_id: int
+                       ):
+        """
+        get attendance of player on said event
+        returns -> dict fields:
+            event_id
+            player_id
+            status
+            reason
+        """
+        attendance_data = self.cur.execute(
+            "SELECT * FROM attendance WHERE player_id = ? AND event_id = ?",
+            (player_id, event_id)
+        ).fetchone()
+
+        return attendance_data
+
+    def delete_attendance(self, user_id, event_id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "DELETE FROM attendance WHERE player_id = ? AND event_id = ?",
+            (user_id, event_id)
+        )
+        self.con.commit()
+
+
+class AccessTableSqlite(Sqlite):
+    def __init__(self):
+        super().__init__()
+
+    def get_user_access(self, user_id):
+        """
+        get access of a user
+
+        returns -> dict fields:
+            player_id
+            control_id
+        """
+        access_data = self.cur.execute(
+            "SELECT * FROM access_control WHERE player_id = ?", (user_id, )).fetchone()
+
+        return access_data
+
+    # DELETING
+
+    def delete_user_access(self, id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "DELETE FROM access_control WHERE player_id = ?", (id, ))
+        self.con.commit()
+
+
+class SqliteUserManager(
+        UsersTableSqlite,
+        EventsTableSqlite,
+        AccessTableSqlite,
+        AttendanceTableSqlite
+        ):
     """
     sqlite3 connector for User Manager methods
     """
@@ -132,16 +339,16 @@ class SqliteUserManager(Sqlite):
 
     # INSERTING NEW RECORDS
 
-    def insert_user(self, id, telegram_user):
-        """
-        inserts a new user record
-        """
-        self.cur.execute("BEGIN TRANSACTION")
-        self.cur.execute(
-            "INSERT INTO players(id, telegram_user) VALUES (?, ?)",
-            (id, telegram_user)
-        )
-        self.con.commit()
+    # def insert_user(self, id, telegram_user):
+    #     """
+    #     inserts a new user record
+    #     """
+    #     self.cur.execute("BEGIN TRANSACTION")
+    #     self.cur.execute(
+    #         "INSERT INTO players(id, telegram_user) VALUES (?, ?)",
+    #         (id, telegram_user)
+    #     )
+    #     self.con.commit()
 
     def insert_new_access_record(self, id):
         """
