@@ -49,6 +49,18 @@ class TestUserTablesSqlite(unittest.TestCase):
         player_data = self.db.get_user_by_id(0)
         self.assertIsNone(player_data)
 
+    def test_read_2_fields_user(self):
+        player_data = self.db.get_user_by_id(
+            id=self.user['id'], name=self.user['first_name']
+        )
+        self.assertIsNotNone(player_data)
+
+    def test_read_2_fields_not_exist_user(self):
+        player_data = self.db.get_user_by_id(
+            id=self.user['id'], name="xyz"
+        )
+        self.assertIsNone(player_data)
+
     def test_insert_valid_user(self):
         self.db.insert_user(
             id=666,

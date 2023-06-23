@@ -83,12 +83,23 @@ class UsersTableSqlite(Sqlite):
         )
         self.con.commit()
 
-    def get_user_by_id(self, id: int):
+    def get_user_by_id(self, id: int, name=None):
         """
         gets the user by id
         """
-        user_data = self.cur.execute(
-            "SELECT * FROM players WHERE id = ?", (id, )).fetchone()
+        query = "SELECT * FROM players WHERE {columns}"
+
+        values = [id]
+        columns = ["id = ?"]
+
+        if name is not None:
+            values.append(name)
+            columns.append("name = ?")
+
+        columns = " AND ".join(columns)
+
+        user_data = self.cur.execute(query.format(
+            columns=columns), tuple(values)).fetchone()
 
         return user_data
 
@@ -320,37 +331,6 @@ class SqliteUserManager(
         super().__init__()
 
     # QUERYING
-    def get_user_profile(self, **kwargs):
-        """
-        get all the player data from the db
-
-        params = user_id, name
-        returns sqlite3.Row, fields:
-            name
-            telegram_user
-            hidden
-            gender
-            notification
-            language
-        """
-        # TODO build some custom errors
-        if 'user_id' not in kwargs:
-            raise SyntaxError
-
-        if len(kwargs) == 1:
-
-            user_data = self.cur.execute(
-                "SELECT * FROM players WHERE id = ?",
-                (kwargs['user_id'], )
-            ).fetchone()
-
-        if len(kwargs) == 2:
-            user_data = self.cur.execute(
-                "SELECT * FROM players WHERE id = ? AND name = ?",
-                (kwargs['user_id'], kwargs['name'])
-            ).fetchone()
-
-        return user_data
 
     def get_user_access(self, user_id):
         """

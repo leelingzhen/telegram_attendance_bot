@@ -59,8 +59,8 @@ class UserManager:
         self.notification = notification
 
     def get_exisiting_name(self, name):
-        user_data = self.db.get_user_profile(
-            user_id=self.id,
+        user_data = self.db.get_user_by_id(
+            id=self.id,
             name=name
         )
         if user_data:
@@ -75,15 +75,16 @@ class UserManager:
 
     def push_update_user(self):
         self.db.update_user(
-                id=self.id,
-                name=self.name,
-                notification=self.notification
-                )
+            id=self.id,
+            name=self.name,
+            notification=self.notification
+        )
 
     def push_new_user(self):
+        self.db.update_user(id=self.id, name=self.name, gender=self.gender)
         db.execute("BEGIN TRANSACTION")
-        data = (self.name, self.gender, self.id)
-        db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
+        # data = (self.name, self.gender, self.id)
+        # db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
         data = (1, self.id)
         db.execute(
             'UPDATE access_control SET control_id=? WHERE player_id = ?', data)
@@ -95,7 +96,7 @@ class UserManager:
         returns user profiles in a list
 
         """
-        user_profile = self.db.get_user_profile(user_id=self.id)
+        user_profile = self.db.get_user_by_id(id=self.id)
         if user_profile is None:
             self.cache_new_user()
 
