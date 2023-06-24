@@ -217,7 +217,6 @@ class TestSqliteUserManager(unittest.TestCase):
 
     def test_get_access_join_on_users(self):
         users = self.db.get_users_join_on_access(100)
-        print(users)
         self.assertEqual(len(users), 1)
 
 

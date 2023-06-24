@@ -31,18 +31,26 @@ class UserObj:
 
 
 class UserManager:
-    def __init__(self, user: dict):
+    def __init__(
+            self,
+            user: dict = None,
+            db=src.Database.sqlite.SqliteUserManager()
+    ):
         """
         intialise user from telegram message context
+        Args:
+            user: optional if empty, it will not have telegram context fields
+            db : the type of db to be used
         """
         # importing connector
-        self.db = src.Database.sqlite.SqliteUserManager()
+        self.db = db
 
-        self.username = user['username']
-        self.id = user['id']
-        self.first_name = user['first_name']
-        self.is_bot = user['is_bot']
-        self.access = self.get_user_access()
+        if user:
+            self.username = user['username']
+            self.id = user['id']
+            self.first_name = user['first_name']
+            self.is_bot = user['is_bot']
+            self.access = self.get_user_access()
 
         self.name = None
         self.telegram_user = None
@@ -188,6 +196,7 @@ class PlayerAccessRecord(UserManager):
         """
         initialise user from id from db
         """
+        UserManager.__init__(self)
 
         self.id = id
         self.retrieve_user_data()
@@ -346,4 +355,3 @@ class AdminUser(UserManager):
             user_id=player.id,
             new_access=player.new_access
         )
-

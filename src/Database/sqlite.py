@@ -538,7 +538,6 @@ class SqliteUserManager(
             1 will only query users with notification == 1
         """
         query = self.read_query('users_record.sql')
-
         data = self.cur.execute(query, (access, notification)).fetchall()
 
         return data
@@ -556,7 +555,6 @@ class SqliteUserManager(
         get the list of players belonging to that access
         """
         query = self.read_query("get_players_join_on_access.sql")
-
         user_data = self.cur.execute(query, (access, )).fetchall()
 
         return user_data

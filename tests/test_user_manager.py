@@ -126,10 +126,14 @@ class TestAdminManager(unittest.TestCase):
         position = self.db.get_position(user_record.access)
         self.assertEqual(position, user_record.position)
 
-        
-
-
-
+    def test_push_player_record(self):
+        user_record = PlayerAccessRecord(self.user['id'])
+        user_record.new_access = 5
+        self.user_instance.push_player_access(user_record)
+        new_user_record = PlayerAccessRecord(self.user['id'])
+        user_record.new_access = 4
+        self.user_instance.push_player_access(user_record)
+        self.assertEqual(new_user_record.access, 5)
 
 
 if __name__ == "__main__":
