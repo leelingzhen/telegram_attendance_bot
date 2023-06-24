@@ -38,15 +38,10 @@ class AttendanceManager:
         self.reason = ""
 
         attendance_data = self.db.get_attendance(user_id, event_id)
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute(
-                "SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?",
-                (event_id, user_id)).fetchone()
-            if data:
-                self.exists = True
-                self.status = data['status']
-                self.reason = data['reason']
+        if attendance_data:
+            self.exists = True
+            self.status = attendance_data['status']
+            self.reason = attendance_data['reason']
 
     def get_status(self):
         return self.status
