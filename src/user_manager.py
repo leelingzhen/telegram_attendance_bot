@@ -228,20 +228,7 @@ class AdminUser(UserManager):
 
         """
         access = 4 if only_members else 2
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            query = (access, only_active)
-            data = db.execute("""
-                SELECT * FROM players
-                JOIN access_control ON players.id = access_control.player_id
-                WHERE access_control.control_id >= ?
-                AND players.notification >= ?
-                AND players.hidden = 0
-                ORDER BY
-                gender DESC,
-                name
-                            """, query).fetchall()
-
+        data = self.db.get_users_list(access=access, notification=only_members)
         return data
 
     def intercept_msg(self, msg, msg_entities, parse_mode):

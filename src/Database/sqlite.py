@@ -525,3 +525,20 @@ class SqliteUserManager(
         ).fetchall()
 
         return data
+
+    def get_users_list(
+            self,
+            access: int,
+            notification: int,
+    ):
+        """
+        access: will only query for users with access higher than this variable
+        notification:
+            0 will query all users
+            1 will only query users with notification == 1
+        """
+        query = self.read_query('users_record.sql')
+
+        data = self.cur.execute(query, (access, notification)).fetchall()
+
+        return data
