@@ -544,6 +544,19 @@ class SqliteUserManager(
         return data
 
     def get_access_levels(self):
+        """
+        get a list of the access levels in access_control_description
+        """
         access_data = self.cur.execute(
             'SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
         return access_data
+
+    def get_users_join_on_access(self, access: int):
+        """
+        get the list of players belonging to that access
+        """
+        query = self.read_query("get_players_join_on_access.sql")
+
+        user_data = self.cur.execute(query, (access, )).fetchall()
+
+        return user_data

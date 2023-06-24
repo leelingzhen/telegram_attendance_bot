@@ -324,18 +324,8 @@ class AdminUser(UserManager):
         """
         return user ids and name based on the access selected
         """
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            players = db.execute("""
-                    SELECT id, name FROM players
-                    JOIN access_control ON players.id = access_control.player_id
-                    WHERE control_id = ?
-                    ORDER BY
-                    name COLLATE NOCASE
-                    """,
-                                 (access, )
-                                 ).fetchall()
-        return players
+        users = self.db.get_users_join_on_access(access)
+        return users
 
     def read_msg_from_file(self, date_str: str) -> str:
         """
