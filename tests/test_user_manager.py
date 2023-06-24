@@ -2,7 +2,7 @@ import unittest
 import sqlite3
 import os
 
-from src.user_manager import UserManager, AdminUser
+from src.user_manager import UserManager, AdminUser, PlayerAccessRecord
 import src.Database.sqlite
 
 
@@ -120,6 +120,16 @@ class TestAdminManager(unittest.TestCase):
 
         self.assertGreater(len(super), len(not_super),
                            'super users get more access to more access levels')
+
+    def test_generate_player_access_record(self):
+        user_record = PlayerAccessRecord(self.user['id'])
+        position = self.db.get_position(user_record.access)
+        self.assertEqual(position, user_record.position)
+
+        
+
+
+
 
 
 if __name__ == "__main__":

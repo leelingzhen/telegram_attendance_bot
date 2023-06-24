@@ -188,6 +188,7 @@ class PlayerAccessRecord(UserManager):
         """
         initialise user from id from db
         """
+
         self.id = id
         self.retrieve_user_data()
         self.access = self.get_user_access()
@@ -341,7 +342,8 @@ class AdminUser(UserManager):
         return PlayerAccessRecord(id)
 
     def push_player_access(self, player: PlayerAccessRecord):
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("UPDATE access_control SET control_id = ? WHERE player_id = ?",
-                       (player.new_access, player.id))
-            db.commit()
+        self.db.update_access(
+            user_id=player.id,
+            new_access=player.new_access
+        )
+
