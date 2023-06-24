@@ -542,3 +542,8 @@ class SqliteUserManager(
         data = self.cur.execute(query, (access, notification)).fetchall()
 
         return data
+
+    def get_access_levels(self):
+        access_data = self.cur.execute(
+            'SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
+        return access_data

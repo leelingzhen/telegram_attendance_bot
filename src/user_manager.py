@@ -314,12 +314,9 @@ class AdminUser(UserManager):
         based on the access control of the admin user,
         get the levels of access available to the user
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            access_data = db.execute(
-                'SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
+        access_data = self.db.get_access_levels()
 
-        if self.access == 100:
+        if self.access != 100:
             access_data = access_data[1:8]
         return access_data
 

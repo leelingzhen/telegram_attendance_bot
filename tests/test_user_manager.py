@@ -2,7 +2,7 @@ import unittest
 import sqlite3
 import os
 
-from src.user_manager import UserManager
+from src.user_manager import UserManager, AdminUser
 import src.Database.sqlite
 
 
@@ -83,6 +83,43 @@ class TestUserManager(unittest.TestCase):
         position = self.user_instance.parse_access_control_description()
         self.assertEqual(position, "Member",
                          "needs to return Member for access = 4")
+
+
+class TestAdminManager(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.user = {
+            'username': "jacobjason",
+            'id': 1234567,
+            'first_name': 'Jacob Jason',
+            'is_bot': False,
+        }
+
+        self.new_user = {
+            'username': "new_user",
+            'id': 568910,
+            'first_name': 'New User',
+            'is_bot': False,
+        }
+        self.con = sqlite3.connect(
+            os.path.join('resources', 'attendance.db'))
+        self.con.row_factory = sqlite3.Row
+        self.cur = self.con.cursor()
+
+        self.db = src.Database.sqlite.SqliteUserManager()
+
+        self.user_instance = AdminUser(self.user)
+        # self.user_instance.access = 2
+
+    def test_get_access_levels_admin(self):
+        self.user_instance.access = 1
+        not_super = self.user_instance.get_access_levels()
+        self.user_instance.access = 100
+        super = self.user_instance.get_access_levels()
+
+        self.assertGreater(len(super), len(not_super),
+                           'super users get more access to more access levels')
 
 
 if __name__ == "__main__":

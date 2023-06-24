@@ -212,6 +212,9 @@ class TestSqliteUserManager(unittest.TestCase):
         self.assertEqual(
             len(data), 2, "there are only 2 events that user_id 1234567 is attending")
 
+    def test_get_access_levels(self):
+        self.db.get_access_levels()
+
 
 if __name__ == "__main__":
     unittest.main()
