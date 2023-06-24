@@ -98,7 +98,7 @@ class UserManager:
         self.telegram_user = user_profile['telegram_user']
         self.hidden = user_profile['hidden']
         self.gender = user_profile['gender']
-        self.notication = user_profile['notification']
+        self.notification = user_profile['notification']
         self.language = user_profile['language_pack']
 
         return user_profile
