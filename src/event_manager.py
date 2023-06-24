@@ -5,6 +5,7 @@ import json
 
 from datetime import datetime, timedelta
 from telegram import MessageEntity
+import src.Database.sqlite
 
 
 with open("config.json") as f:
@@ -23,18 +24,25 @@ class AttendanceManager:
     support pulling and pushing data to the db
     """
 
-    def __init__(self, player_id, event_id):
-        self.player_id = player_id
+    def __init__(
+            self,
+            user_id,
+            event_id,
+            db=src.Database.sqlite.AttendanceTableSqlite()
+    ):
+        self.db = db
+        self.user_id = user_id
         self.event_id = event_id
         self.exists = False
         self.status = -1
         self.reason = ""
 
+        attendance_data = self.db.get_attendance(user_id, event_id)
         with sqlite3.connect(CONFIG['database']) as db:
             db.row_factory = sqlite3.Row
             data = db.execute(
                 "SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?",
-                (event_id, player_id)).fetchone()
+                (event_id, user_id)).fetchone()
             if data:
                 self.exists = True
                 self.status = data['status']
@@ -85,14 +93,14 @@ class AttendanceManager:
                 data = (self.status,
                         self.reason,
                         self.event_id,
-                        self.player_id
+                        self.user_id
                         )
                 db.execute(
                     "UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?", data)
             else:
                 data = (
                     self.event_id,
-                    self.player_id,
+                    self.user_id,
                     self.status,
                     self.reason,
                 )
@@ -169,9 +177,9 @@ class EventManager:
         """
         event_date = self.event_date
         event_date = event_date.replace(
-                hour=end_time.hour,
-                minute=end_time.minute
-                )
+            hour=end_time.hour,
+            minute=end_time.minute
+        )
         return event_date
 
     def set_event_end(self, event_end: datetime):
@@ -258,10 +266,9 @@ class EventManager:
         event_date = event_date.replace(
             hour=self.start_time.hour,
             minute=self.start_time.minute
-            )
+        )
         self.event_date = event_date
         self.start_time = event_date
-
 
 
 class TrainingEventManager(EventManager):
