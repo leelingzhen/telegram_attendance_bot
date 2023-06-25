@@ -289,13 +289,6 @@ class TrainingEventManager(EventManager):
 
         return output
 
-    def get_event_by_id(self, id: int) -> AttendanceManager:
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event = db.execute(
-                "SELECT * FROM events WHERE id = ?", (id, )).fetchone()
-        return event
-
     def attendance_of_members(self,
                               attendance: int,
                               gender: str,

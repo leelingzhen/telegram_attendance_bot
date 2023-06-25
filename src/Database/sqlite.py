@@ -12,7 +12,10 @@ class Sqlite:
 
     def __init__(self, testing=False):
 
-        self.con = sqlite3.connect(os.path.join('resources', 'attendance.db'))
+        self.con = sqlite3.connect(
+            os.path.join('resources', 'attendance.db'),
+            check_same_thread=False
+        )
         # self.con.row_factory = self.namedtuple_factory
         self.con.row_factory = sqlite3.Row
         self.cur = self.con.cursor()
@@ -511,6 +514,86 @@ class SqliteEventManager(
 
     def __init__(self):
         super().__init__()
+
+    def get_users_on_attendance_access(self,
+                                       attendance: int,
+                                       gender: str,
+                                       event_id: int,
+                                       access_cat: str,
+                                       ):
+        """
+        Query players' attendance based on specified criteria.
+
+        Args:
+            self: The current instance of the class.
+            attendance (int): The attendance status (1 for attending, 0 for absentees).
+            gender (str): The gender filter ('male', 'female', or 'both').
+            event_id (int): The ID of the event (format: %Y%m%d%H%M).
+            access_cat (str): The access category ('member' or 'guest').
+
+        Returns:
+            player_data (list): A list of tuples containing player information based on the specified criteria.
+
+        Raises:
+            SyntaxError: If the provided gender or access_cat values are not valid.
+        """
+        query = self.read_query('attendance_query.sql')
+        data = [event_id, attendance]
+        gender = gender.lower()
+
+        # formating query based on gender
+        if gender == "both":
+            gender = ""
+        elif gender == 'male' or gender == 'female':
+            gender = f"AND gender = '{gender.capitalize()}'"
+        else:
+            raise SyntaxError("only male, female, or both is permitted")
+
+        # formatting query based on access_cat
+        access_cat = access_cat.lower()
+
+        if access_cat == 'member':
+            access_range = '> 3'
+        elif access_cat == 'guest':
+            access_range = 'BETWEEN 2 AND 3'
+        else:
+            raise SyntaxError("only 'member' or 'guest' permitted")
+
+        player_data = self.cur.execute(query.format(
+            gender=gender, access_range=access_range), data).fetchall()
+        return player_data
+
+    def unindicated_members(self, event_id: int = None):
+        """
+        returns a list of unindicated members
+        """
+        if event_id is None:
+            event_id = self.id
+        with sqlite3.connect(CONFIG['database']) as db:
+            db.row_factory = sqlite3.Row
+            player_data = db.execute("""
+                    SELECT id, name, telegram_user,
+                    access_control.control_id
+                    FROM players
+                    JOIN access_control on players.id = access_control.player_id
+                    WHERE name NOT IN
+                    (
+                        SELECT name FROM players
+                        JOIN attendance ON players.id = attendance.player_id
+                        JOIN access_control ON players.id = access_control.player_id
+                        WHERE event_id=?
+                    )
+                    AND notification == 1
+                    AND access_control.control_id >= 4
+                    AND access_control.control_id != 7
+                    AND players.hidden = 0
+                    ORDER BY
+                    players.gender DESC,
+                    players.name COLLATE NOCASE
+
+                             """, (self.id, )).fetchall()
+        return player_data
+
 
 
 class SqliteUserManager(

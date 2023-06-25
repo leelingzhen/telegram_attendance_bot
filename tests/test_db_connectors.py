@@ -220,5 +220,23 @@ class TestSqliteUserManager(unittest.TestCase):
         self.assertEqual(len(users), 1)
 
 
+class TestSqliteEventManager(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.db = src.Database.sqlite.SqliteEventManager()
+
+    def test_get_users_on_attendance_access(self):
+        users = self.db.get_users_on_attendance_access(
+            attendance=1,
+            gender='both',
+            event_id=202305272000,
+            access_cat='member'
+        )
+        for item in users:
+            print(item['name'])
+        self.assertIsNotNone(users)
+
+
 if __name__ == "__main__":
     unittest.main()
