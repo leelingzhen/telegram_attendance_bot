@@ -81,27 +81,20 @@ class AttendanceManager:
         push attendance update to the db
         """
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("BEGIN TRANSACTION")
-            if self.record_exists():
-                data = (self.status,
-                        self.reason,
-                        self.event_id,
-                        self.user_id
-                        )
-                db.execute(
-                    "UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?", data)
-            else:
-                data = (
-                    self.event_id,
-                    self.user_id,
-                    self.status,
-                    self.reason,
-                )
-                db.execute(
-                    "INSERT INTO attendance (event_id, player_id, status, reason) VALUES (?, ?, ?, ?)", data)
-            db.commit()
+        if self.record_exists():
+            self.db.update_attendance(
+                user_id=self.user_id,
+                event_id=self.event_id,
+                status=self.status,
+                reason=self.reason
+            )
+        else:
+            self.db.insert_attendance(
+                user_id=self.user_id,
+                event_id=self.event_id,
+                status=self.status,
+                reason=self.reason
+            )
 
 
 class EventManager:

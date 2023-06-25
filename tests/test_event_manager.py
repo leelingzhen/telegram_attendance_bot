@@ -50,3 +50,5 @@ class TestAttendanceManager(unittest.TestCase):
         )
         self.assertIsNotNone(attendance_record.reason,
                              msg=f"reason: {attendance_record.reason}")
+
+
