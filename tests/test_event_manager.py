@@ -16,6 +16,7 @@ class TestAttendanceManager(unittest.TestCase):
         self.event_id_hardcourt = 202306211930
         self.event_id_field_training = 202306241400
         self.event_id_cohesion = 202309022359  # has announcement entities
+        self.event_id_jb = 202305272000
 
         # self.user_instance.access = 2
 
@@ -82,3 +83,17 @@ class TestAttendanceManager(unittest.TestCase):
         event_instance.pull_event()
         self.assertEqual(event_instance.record_exist, False,
                          "record shouldnt exists for event_id = 111")
+
+    def test_curate_attendance(self):
+        event_instance = src.event_manager.TrainingEventManager(
+            self.event_id_jb
+        )
+        male_records, female_records, absentees, unindicated = event_instance.curate_attendance(
+            attach_usernames=False)
+        print("")
+        print("printing curated attendance")
+        print(male_records)
+        print(female_records)
+        print(absentees)
+        print(unindicated)
+        self.assertIsNotNone(male_records)

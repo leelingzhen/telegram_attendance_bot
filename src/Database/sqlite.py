@@ -529,7 +529,7 @@ class SqliteEventManager(
             attendance (int): The attendance status (1 for attending, 0 for absentees).
             gender (str): The gender filter ('male', 'female', or 'both').
             event_id (int): The ID of the event (format: %Y%m%d%H%M).
-            access_cat (str): The access category ('member' or 'guest').
+            access_cat (str): The access category ('member', 'guest' or 'all').
 
         Returns:
             player_data (list): A list of tuples containing player information based on the specified criteria.

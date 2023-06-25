@@ -228,7 +228,7 @@ class TestSqliteEventManager(unittest.TestCase):
 
     def test_get_users_on_attendance_access(self):
         gender = 'both'
-        access_cat = 'member'
+        access_cat = 'all'
         users = self.db.get_users_on_attendance_access(
             attendance=1,
             gender=gender,
@@ -236,7 +236,8 @@ class TestSqliteEventManager(unittest.TestCase):
             access_cat=access_cat
         )
         print("")
-        print(f"printing users from gender = {gender}, access_cat = {access_cat}")
+        print(
+            f"printing users from gender = {gender}, access_cat = {access_cat}")
         for item in users:
             print(item['name'])
         self.assertIsNotNone(users)
@@ -254,8 +255,6 @@ class TestSqliteEventManager(unittest.TestCase):
         for item in users:
             print(item['name'])
         self.assertIsNotNone(users)
-
-
 
 
 if __name__ == "__main__":

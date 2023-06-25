@@ -289,111 +289,16 @@ class TrainingEventManager(EventManager):
 
         return output
 
-    def attendance_of_members(self,
-                              attendance: int,
-                              gender: str,
-                              event_id: int = None,
-                              ):
-        """
-        query attendance from db
-        event_id: format %Y%m%d%H%M
-        attendance: 1 for attending 0 for absentees
-        gender: either Male or Female
-        """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                SELECT
-                    id, name, gender, telegram_user,
-                    access_control.control_id,
-                    attendance.status, attendance.reason
-                FROM players
-                JOIN attendance on players.id = attendance.player_id
-                JOIN access_control on players.id = access_control.player_id
-                WHERE event_id = ?
-                AND players.hidden = 0
-                AND access_control.control_id != 7
-                AND attendance.status = ?
-                AND gender = ?
-                AND access_control.control_id > 3
-                ORDER BY
-                players.name,
-                players.gender DESC
-
-                       """, (event_id, attendance, gender,)).fetchall()
-        return player_data
-
-    def attendance_of_guests(self,
-                             attendance: int,
-                             gender: str,
-                             event_id: int = None,
-                             ):
-        """
-        query attendance from db
-        event_id: format %Y%m%d%H%M
-        attendance: 1 for attending 0 for absentees
-        gender: either Male or Female
-        """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                SELECT
-                    id, name, gender, telegram_user,
-                    access_control.control_id,
-                    attendance.status, attendance.reason
-                FROM players
-                JOIN attendance on players.id = attendance.player_id
-                JOIN access_control on players.id = access_control.player_id
-                WHERE event_id = ?
-                AND players.hidden = 0
-                AND attendance.status = ?
-                AND gender = ?
-                AND access_control.control_id >= 2
-                AND access_control.control_id <4
-                ORDER BY
-                players.name COLLATE NOCASE,
-                players.gender DESC
-
-                       """, (event_id, attendance, gender,)).fetchall()
-        return player_data
-
     def unindicated_members(self, event_id: int = None) -> sqlite3.Row:
         """
         returns a list of unindicated members
         """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                    SELECT id, name, telegram_user,
-                    access_control.control_id
-                    FROM players
-                    JOIN access_control on players.id = access_control.player_id
-                    WHERE name NOT IN
-                    (
-                        SELECT name FROM players
-                        JOIN attendance ON players.id = attendance.player_id
-                        JOIN access_control ON players.id = access_control.player_id
-                        WHERE event_id=?
-                    )
-                    AND notification == 1
-                    AND access_control.control_id >= 4
-                    AND access_control.control_id != 7
-                    AND players.hidden = 0
-                    ORDER BY
-                    players.gender DESC,
-                    players.name COLLATE NOCASE
-
-                             """, (self.id, )).fetchall()
+        player_data = self.db.get_unindicated_users(
+            event_id=self.id, access_cat='members')
         return player_data
 
     def attendance_to_str(self,
-                          player_data: sqlite3.Row,
+                          user_data: sqlite3.Row,
                           attach_usernames: bool = False
                           ) -> list:
         """
@@ -402,13 +307,13 @@ class TrainingEventManager(EventManager):
 
         formatted_attendance = list()
 
-        for record in player_data:
+        for record in user_data:
             entry = record['name']
 
             if "reason" not in record.keys():
                 pass
             elif record["reason"] != "":
-                entry += f"({record['reason']})"
+                entry += f" ({record['reason']})"
 
             if record['control_id'] < 4:
                 entry = f"(guest) {entry}"
@@ -425,6 +330,30 @@ class TrainingEventManager(EventManager):
 
         return formatted_attendance
 
+    def compile_attendance_by_cat(
+            self,
+            attendance: int,
+            gender: str,
+            access_cat: str = 'all'
+    ):
+        """
+        attendance can be int or none
+        """
+        if attendance is not None:
+            data = self.db.get_users_on_attendance_access(
+                event_id=self.id,
+                attendance=attendance,
+                gender=gender,
+                access_cat=access_cat
+            )
+        else:
+            data = self.db.get_unindicated_users(
+                event_id=self.id,
+                access_cat=access_cat
+            )
+
+        return self.attendance_to_str(data)
+
     def curate_attendance(self, attach_usernames: int = True) -> tuple:
         """
         queries all the attendance for the said event
@@ -437,30 +366,29 @@ class TrainingEventManager(EventManager):
         absentees = list()
         unindicated = list()
 
-        male_members = self.attendance_of_members(attendance=1, gender="Male")
-        male_records = self.attendance_to_str(male_members)
+        male_records = self.compile_attendance_by_cat(
+            attendance=1,
+            gender='male',
+            access_cat='all'
+        )
 
-        male_guests = self.attendance_of_guests(attendance=1, gender="Male")
-        male_records += self.attendance_to_str(male_guests)
+        female_records = self.compile_attendance_by_cat(
+            attendance=1,
+            gender='female',
+            access_cat='all'
+        )
 
-        female_members = self.attendance_of_members(
-            attendance=1, gender="Female")
-        female_records = self.attendance_to_str(female_members)
+        absentees = self.compile_attendance_by_cat(
+            attendance=0,
+            gender='both',
+            access_cat='all'
+        )
 
-        female_guests = self.attendance_of_guests(
-            attendance=1, gender="Female")
-        female_records += self.attendance_to_str(female_guests)
-
-        absentees = self.attendance_of_members(attendance=0, gender="Male")
-        absentees += self.attendance_of_members(attendance=0, gender="Female")
-        absentees += self.attendance_of_guests(attendance=0, gender="Male")
-        absentees += self.attendance_of_guests(attendance=0, gender="Female")
-
-        absentees = self.attendance_to_str(absentees)
-
-        unindicated = self.unindicated_members()
-        unindicated = self.attendance_to_str(
-            unindicated, attach_usernames=attach_usernames)
+        unindicated = self.compile_attendance_by_cat(
+            attendance=None,
+            gender='both',
+            access_cat='member'
+        )
 
         return male_records, female_records, absentees, unindicated
 

@@ -13,5 +13,7 @@ AND attendance.status = ?
 AND access_control.control_id {access_range}
 ORDER BY
 players.gender DESC,
+CASE WHEN
+	access_control.control_id >= 4 then 0 else 1 end,
 players.name
 
