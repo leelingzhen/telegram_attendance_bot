@@ -2,6 +2,7 @@ import sqlite3
 import os
 from collections import namedtuple
 from datetime import datetime, date
+from telegram import MessageEntity
 
 
 class Sqlite:
@@ -434,6 +435,82 @@ class AccessTableSqlite(Sqlite):
         self.cur.execute(
             "DELETE FROM access_control WHERE player_id = ?", (id, ))
         self.con.commit()
+
+
+class AnnouncementEntitySqlite(Sqlite):
+    """
+    CRUD operations for annoucement entities
+    only create read and delete are available in this context
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def get_announcement_entities(self, event_id):
+        """
+        get announcement entities
+        """
+        data = self.cur.execute(
+            "SELECT * FROM announcement_entities WHERE event_id = ?",
+            (event_id,)
+        ).fetchall()
+
+        return data
+
+    def delete_announcement_entities(self, event_id):
+        """
+        delete all announcement entities of id = event_id
+        """
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "DELETE FROM announcement_entities WHERE event_id = ?", (event_id))
+        self.con.commit()
+
+    def insert_announcement_entities(
+            self,
+            event_id: int,
+            entities: MessageEntity
+    ):
+        """
+        Insert announcement entities into the database.
+
+        Args:
+            self: The current instance of the class.
+            event_id (int): The ID of the event associated with the entities.
+            entities (list): A list of MessageEntity objects representing the announcement entities.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
+        insert_data = list()
+        for entity in entities:
+            row = (event_id, entity.type, entity.offset, entity.length)
+            insert_data.append(row)
+
+        self.cur.execute('BEGIN TRANSACTION')
+        self.cur.executemany(
+            "INSERT INTO announcement_entities VALUES (?, ?, ?, ?)",
+            insert_data
+        )
+        self.con.commit()
+
+
+class SqliteEventManager(
+        UsersTableSqlite,
+        EventsTableSqlite,
+        AccessTableSqlite,
+        AttendanceTableSqlite,
+        AnnouncementEntitySqlite,
+):
+    """
+    sqlite3 connector for event manager methods
+    """
+
+    def __init__(self):
+        Sqlite.__init__()
 
 
 class SqliteUserManager(

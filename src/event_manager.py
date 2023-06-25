@@ -106,7 +106,15 @@ class EventManager:
     other wise class fields will be all empty
     """
 
-    def __init__(self, event_id: int, record_exist=False):
+    def __init__(
+            self,
+            event_id: int,
+            record_exist=False,
+            db=src.Database.sqlite.SqliteEventManager
+    ):
+        # DB connector
+        self.db = db
+
         self.id = event_id
         self.record_exist = record_exist
 
@@ -188,25 +196,16 @@ class EventManager:
     def generate_entities(self):
         entities = list()
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-
-            data = db.execute(
-                "SELECT * FROM announcement_entities WHERE event_id = ?", (
-                    self.id, )
-            ).fetchall()
-
-            if data is None:
-                return None
-
-            for entity in data:
-                entities.append(
-                    MessageEntity(
-                        type=entity['entity_type'],
-                        offset=entity['offset'],
-                        length=entity['entity_length']
-                    )
+        data = self.db.get_announcement_entities(event_id=self.id)
+        for entity in data:
+            entities.append(
+                MessageEntity(
+                    type=entity['entity_type'],
+                    offset=entity['offset'],
+                    length=entity['entity_length']
                 )
+            )
+
         self.announcement_entities = entities
         return entities
 
