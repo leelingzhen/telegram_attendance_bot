@@ -13,6 +13,10 @@ class TestAttendanceManager(unittest.TestCase):
         self.event_id_2 = 12345676  # attending
         self.event_id_3 = 12345677  # attending with reason
 
+        self.event_id_hardcourt = 202306211930
+        self.event_id_field_training = 202306241400
+        self.event_id_cohesion = 202309022359  # has announcement entities
+
         # self.user_instance.access = 2
 
     def test_AttendanceManager_init_exists(self):
@@ -51,4 +55,13 @@ class TestAttendanceManager(unittest.TestCase):
         self.assertIsNotNone(attendance_record.reason,
                              msg=f"reason: {attendance_record.reason}")
 
+    def test_announcement_entities(self):
+        event_instance = src.event_manager.EventManager(self.event_id_cohesion)
+        event_instance.generate_entities()
+        self.assertIsNotNone(event_instance.announcement_entities)
 
+    def test_no_announcement_entities(self):
+        event_instance = src.event_manager.EventManager(
+            self.event_id_field_training)
+        event_instance.generate_entities()
+        self.assertEqual(event_instance.announcement_entities, list())

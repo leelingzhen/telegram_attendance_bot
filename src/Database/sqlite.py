@@ -446,7 +446,7 @@ class AnnouncementEntitySqlite(Sqlite):
     def __init__(self):
         super().__init__()
 
-    def get_announcement_entities(self, event_id):
+    def get_announcement_entities(self, event_id: int):
         """
         get announcement entities
         """
@@ -510,7 +510,7 @@ class SqliteEventManager(
     """
 
     def __init__(self):
-        Sqlite.__init__()
+        super().__init__()
 
 
 class SqliteUserManager(

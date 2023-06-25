@@ -110,7 +110,7 @@ class EventManager:
             self,
             event_id: int,
             record_exist=False,
-            db=src.Database.sqlite.SqliteEventManager
+            db=src.Database.sqlite.SqliteEventManager()
     ):
         # DB connector
         self.db = db
@@ -196,7 +196,7 @@ class EventManager:
     def generate_entities(self):
         entities = list()
 
-        data = self.db.get_announcement_entities(event_id=self.id)
+        data = self.db.get_announcement_entities(self.id)
         for entity in data:
             entities.append(
                 MessageEntity(
@@ -226,27 +226,21 @@ class EventManager:
 
         returns: bool = True if record exists
         """
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute(
-                "SELECT * FROM events WHERE id = ?", (self.id, )).fetchone()
-            if data is None:
-                self.record_exist = False
-                return False
+        data = self.db.get_event_by_id(self.id)
 
-            # event end timing, type datetime
-            self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
-            self.start_time = datetime.strptime(data["start_time"], "%H:%M")
-            self.end_time = datetime.strptime(data["end_time"], "%H:%M")
-            self.event_type = data["event_type"]
-            self.announcement = data["announcement"]  # str
-            self.location = data["location"]
-            self.announcement_entities = None  # list of telegram.Message
-            self.access_control = data["access_control"]  # type int
+        # event end timing, type datetime
+        self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
+        self.start_time = datetime.strptime(data["start_time"], "%H:%M")
+        self.end_time = datetime.strptime(data["end_time"], "%H:%M")
+        self.event_type = data["event_type"]
+        self.announcement = data["announcement"]  # str
+        self.location = data["location"]
+        self.announcement_entities = None  # list of telegram.Message
+        self.access_control = data["access_control"]  # type int
 
-            self.record_exist = True
-            self.correct_event_date()
-            return True
+        self.record_exist = True
+        self.correct_event_date()
+        return True
 
     def correct_event_date(self):
         event_date = self.event_date
