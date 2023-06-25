@@ -227,15 +227,35 @@ class TestSqliteEventManager(unittest.TestCase):
         self.db = src.Database.sqlite.SqliteEventManager()
 
     def test_get_users_on_attendance_access(self):
+        gender = 'both'
+        access_cat = 'member'
         users = self.db.get_users_on_attendance_access(
             attendance=1,
-            gender='both',
+            gender=gender,
             event_id=202305272000,
-            access_cat='member'
+            access_cat=access_cat
         )
+        print("")
+        print(f"printing users from gender = {gender}, access_cat = {access_cat}")
         for item in users:
             print(item['name'])
         self.assertIsNotNone(users)
+
+    # TODO raise erros for wrong cats
+
+    def test_get_unindicated(self):
+        access_cat = 'member'
+        users = self.db.get_unindicated_users(
+            event_id=202305272000,
+            access_cat=access_cat
+        )
+        print("")
+        print(f"printing unindicated users of access_cat = {access_cat}")
+        for item in users:
+            print(item['name'])
+        self.assertIsNotNone(users)
+
+
 
 
 if __name__ == "__main__":

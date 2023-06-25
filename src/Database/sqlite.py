@@ -556,6 +556,8 @@ class SqliteEventManager(
             access_range = '> 3'
         elif access_cat == 'guest':
             access_range = 'BETWEEN 2 AND 3'
+        elif access_cat == 'all':
+            access_range = '>= 2'
         else:
             raise SyntaxError("only 'member' or 'guest' permitted")
 
@@ -563,37 +565,38 @@ class SqliteEventManager(
             gender=gender, access_range=access_range), data).fetchall()
         return player_data
 
-    def unindicated_members(self, event_id: int = None):
+    def get_unindicated_users(
+            self,
+            event_id: int,
+            access_cat: str = 'member'
+    ) -> sqlite3.Row:
         """
-        returns a list of unindicated members
+        Retrieve a list of unindicated members based on the specified criteria.
+
+        Args:
+            self: The current instance of the class.
+            event_id (int): The ID of the event.
+            access_cat (str, optional): The access category ('member', 'guest', or 'all'). Defaults to 'member'.
+
+        Returns:
+            data (list): A list of unindicated members.
+
+        Raises:
+            SyntaxError: If the provided access_cat value is not valid.
         """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                    SELECT id, name, telegram_user,
-                    access_control.control_id
-                    FROM players
-                    JOIN access_control on players.id = access_control.player_id
-                    WHERE name NOT IN
-                    (
-                        SELECT name FROM players
-                        JOIN attendance ON players.id = attendance.player_id
-                        JOIN access_control ON players.id = access_control.player_id
-                        WHERE event_id=?
-                    )
-                    AND notification == 1
-                    AND access_control.control_id >= 4
-                    AND access_control.control_id != 7
-                    AND players.hidden = 0
-                    ORDER BY
-                    players.gender DESC,
-                    players.name COLLATE NOCASE
+        query = self.read_query("unindicated_users.sql")
 
-                             """, (self.id, )).fetchall()
-        return player_data
+        if access_cat == "member":
+            query = query.format(access_range='>= 4')
+        elif access_cat == 'guest':
+            query = query.format(access_range='BETWEEN 2 AND 3')
+        elif access_cat == 'all':
+            query = query.format(access_range='>= 2')
+        else:
+            raise SyntaxError("only accept 'member', 'guest', 'all'")
+        data = self.cur.execute(query, (event_id, )).fetchall()
 
+        return data
 
 
 class SqliteUserManager(
