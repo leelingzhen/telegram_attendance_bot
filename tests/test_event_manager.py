@@ -65,3 +65,20 @@ class TestAttendanceManager(unittest.TestCase):
             self.event_id_field_training)
         event_instance.generate_entities()
         self.assertEqual(event_instance.announcement_entities, list())
+
+    def test_pull_event(self):
+        event_instance = src.event_manager.EventManager(
+            self.event_id_cohesion
+        )
+        event_instance.pull_event()
+        self.assertEqual(event_instance.event_type, "Cohesion")
+        self.assertEqual(event_instance.record_exist,
+                         True, "record should exist")
+
+    def test_pull_event_doesnt_exist(self):
+        event_instance = src.event_manager.EventManager(
+            111
+        )
+        event_instance.pull_event()
+        self.assertEqual(event_instance.record_exist, False,
+                         "record shouldnt exists for event_id = 111")

@@ -227,6 +227,8 @@ class EventManager:
         returns: bool = True if record exists
         """
         data = self.db.get_event_by_id(self.id)
+        if not data:
+            return False
 
         # event end timing, type datetime
         self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
