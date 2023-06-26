@@ -306,5 +306,33 @@ class TestSqliteEventManager(unittest.TestCase):
         self.assertIsNotNone(users)
 
 
+class TestMessageTableSqlite(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        self.db = src.Database.sqlite.MessageTableSqlite()
+
+    def test_get_message_event_only(self):
+        data = self.db.get_msg_records(event_id=202306071930)
+        self.assertEqual(
+            len(data), 1, 'should only be able to query one record')
+
+    def test_get_message_user_only(self):
+        data = self.db.get_msg_records(user_id=89637568)
+        self.assertGreater(len(data), 1)
+
+    def test_get_message_user_and_event(self):
+        data = self.db.get_msg_records(user_id=89637568, event_id=202306071930)
+        self.assertEqual(len(data), 1)
+
+    def test_create_msg_record(self):
+        self.db.insert_msg_record(user_id=123, event_id=123, message_id=123)
+        data = self.db.get_msg_records(event_id=123)
+        self.db.delete_msg_record(user_id=123, event_id=123)
+        deleted = self.db.get_msg_records(event_id=123)
+        self.assertIsNotNone(data)
+        self.assertEqual(deleted, list())
+        
+
+
 if __name__ == "__main__":
     unittest.main()

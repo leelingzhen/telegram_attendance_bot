@@ -41,6 +41,63 @@ class Sqlite:
         return cls._make(row)
 
 
+class MessageTableSqlite(Sqlite):
+    """
+    CRUD for kaypoh_messages Table
+    """
+
+    def __init__(self):
+        super().__init__()
+    # CREATING
+
+    def insert_msg_record(self, user_id, message_id, event_id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            "INSERT INTO kaypoh_messages VALUES (?, ?, ? )",
+            (user_id, message_id, event_id)
+        )
+        self.con.commit()
+
+    def get_msg_records(self, event_id=None, user_id=None):
+        """
+        get msg records by event_id and/or user_id
+        """
+        conditions = list()
+        query = 'SELECT * FROM kaypoh_messages WHERE {conditions}'
+
+        if event_id is None and user_id is None:
+            raise SyntaxError("one of the fields must be filled")
+        if event_id:
+            conditions.append(f'event_id = {event_id}')
+
+        if user_id:
+            conditions.append(f'player_id = {user_id}')
+
+        conditions = ' AND '.join(conditions)
+
+        data = self.cur.execute(query.format(conditions=conditions)).fetchall()
+
+        return data
+
+    def update_msg_record(self, user_id, message_id, event_id):
+        self.cur.execute('BEGIN TRANSACTION')
+        self.cur.execute(
+            'UPDATE kaypoh_messages SET message_id = ? WHERE player_id = ? AND event_id = ?',
+            (message_id, user_id, event_id)
+        )
+        self.con.commit()
+
+    def delete_msg_record(self,
+                          user_id: int,
+                          event_id: int):
+        self.cur.execute('BEGIN TRANSACTION')
+        self.cur.execute(
+            'DELETE FROM kaypoh_messages WHERE player_id = ? AND event_id = ?',
+            (user_id, event_id)
+        )
+        self.con.commit()
+
+
 class UsersTableSqlite(Sqlite):
     """
     CRUD for Players Table
@@ -597,6 +654,7 @@ class SqliteEventManager(
         AccessTableSqlite,
         AttendanceTableSqlite,
         AnnouncementEntitySqlite,
+        MessageTableSqlite,
 ):
     """
     sqlite3 connector for event manager methods
