@@ -155,7 +155,7 @@ class EventManager:
         only use either of the args
         """
         if id and event_date:
-            raise "Only use one of the fields"
+            raise SyntaxError("only use one of the fields")
         if event_date:
             id = event_date.strftime("%Y%m%d%H%M")
         self.id = id
@@ -436,28 +436,21 @@ class AdminEventManager(TrainingEventManager, EventManager):
         self.announcement_entities = entities
 
     def update_event_records(self):
-        data = [
-            self.id,
-            self.event_type,
-            self.event_date.strftime("%Y-%m-%d"),
-            self.start_time.strftime("%H:%M"),
-            self.end_time.strftime("%H:%M"),
-            self.location,
-            self.announcement,
-            self.access_control,
-            self.original_id
-        ]
-
-        with sqlite3.connect(CONFIG['database']) as db:
-            # updating events table
-            db.execute(
-                "UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, announcement = ?, access_control = ? WHERE id = ?", data)
-
-            # updating attendance table
-            db.execute(
-                "UPDATE attendance SET event_id = ? WHERE event_id = ?", (self.id, self.original_id))
-
-            db.commit()
+        self.db.update_event(
+            new_id=self.id,
+            original_id=self.original_id,
+            event_type=self.event_type,
+            event_date=self.event_date.strftime("%Y-%m-%d"),
+            start_time=self.start_time.strftime("%H:%M"),
+            end_time=self.end_time.strftime("%H:%M"),
+            location=self.location,
+            announcement=self.announcement,
+            access_control=self.access_control,
+        )
+        self.db.update_many_attendance_event_ids(
+            original_event_id=self.original_id,
+            new_event_id=self.id
+        )
 
     def check_conflicts(self):
         """
@@ -474,24 +467,16 @@ class AdminEventManager(TrainingEventManager, EventManager):
 
         """
 
+        data = self.db.get_event_by_id(self.id)
         # check conflicts when updating cur event
         if self.record_exist and self.original_id != self.id:
-            with sqlite3.connect(CONFIG['database']) as db:
-                db.row_factory = sqlite3.Row
-
-                data = db.execute('SELECT * FROM events WHERE id = ?',
-                                  (self.id, )).fetchall()
-                if data:
-                    return True
+            if data:
+                return True
 
         # checking conflicts when inserting a new event
         if not self.record_exist:
-            with sqlite3.connect(CONFIG['database']) as db:
-                db.row_factory = sqlite3.Row
-                data = db.execute('SELECT * FROM events WHERE id = ?',
-                                  (self.id, )).fetchall()
-                if data:
-                    return True
+            if data:
+                return True
 
         # at this time, the record exists but there is no change to the
         # datetime, return False

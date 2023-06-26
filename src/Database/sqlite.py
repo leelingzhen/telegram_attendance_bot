@@ -269,8 +269,78 @@ class EventsTableSqlite(Sqlite):
         return event_data
 
     # TODO
-    def update_event(self):
-        pass
+    def update_event(
+            self,
+            new_id: int,
+            original_id: int,
+            event_type: str,
+            event_date: str,  # "%Y-%m-%d"
+            start_time: str,  # "%H:%M"
+            end_time: str,  # "%H:%M"
+            location: str,
+            access_control: int,
+            announcement: str = None
+    ):
+        """
+        Updates an event into the database.
+
+        Args:
+            self: The current instance of the class.
+            new_id (int): The new ID of the event.
+            original_id (int): The event's ID
+            event_type (str): The type of the event.
+            event_date (str): The date of the event in the format "%Y-%m-%d".
+            start_time (str): The start time of the event in the format "%H:%M".
+            end_time (str): The end time of the event in the format "%H:%M".
+            location (str): The location of the event.
+            access_control (int): The access control level of the event.
+            announcement (str, optional): Additional announcement for the event. Defaults to None.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If the event_date, start_time, or end_time does not match the specified format.
+
+        """
+        try:
+            datetime.strptime(event_date, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(
+                f"event_date: {event_date} format needs to be '%Y-%m-%d'")
+
+        try:
+            datetime.strptime(start_time, "%H:%M")
+        except ValueError:
+            raise ValueError(
+                f"start_time: {start_time} does not match '%H:%M"
+            )
+
+        try:
+            datetime.strptime(end_time, "%H:%M")
+        except ValueError:
+            raise ValueError(
+                f"start_time: {end_time} does not match '%H:%M"
+            )
+
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            """
+            UPDATE events SET
+                id = ?,
+                event_type = ?,
+                event_date = ?,
+                start_time = ?,
+                end_time = ?,
+                location = ?,
+                announcement = ?,
+                access_control = ?
+            WHERE
+                id = ?""",
+            (new_id, event_type, event_date, start_time, end_time,
+             location, announcement, access_control, original_id)
+        )
+        self.con.commit()
 
     def delete_event_by_id(self, id):
         self.cur.execute("BEGIN TRANSACTION")
@@ -364,6 +434,16 @@ class AttendanceTableSqlite(Sqlite):
             'UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?',
             (status, reason, event_id, user_id)
         )
+        self.con.commit()
+
+    def update_many_attendance_event_ids(
+            self,
+            original_event_id: int,
+            new_event_id: int,
+    ):
+        self.cur.execute(
+            'UPDATE attendance SET event_id = ? WHERE event_id = ?',
+            (new_event_id, original_event_id))
         self.con.commit()
 
     def delete_attendance(self, user_id, event_id):

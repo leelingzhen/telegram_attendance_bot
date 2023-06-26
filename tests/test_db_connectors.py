@@ -126,6 +126,55 @@ class TestEventsTableSqlite(unittest.TestCase):
         event_data = self.db.get_event_by_id(12345678)
         self.assertIsNotNone(event_data)
 
+    def test_insert_delete_event(self):
+        self.db.insert_event(
+            id=111,
+            event_type='test type',
+            event_date="1998-08-03",  # "%Y-%m-%d"
+            start_time="13:00",  # "%H:%M"
+            end_time="14:00",  # "%H:%M"
+            location="test location",
+            access_control=2,
+            announcement=None
+        )
+        inserted_event = self.db.get_event_by_id(111)
+        self.db.delete_event_by_id(111)
+        deleted_event = self.db.get_event_by_id(111)
+        self.assertIsNotNone(
+            inserted_event, "event should be created and should exist")
+        self.assertIsNone(
+            deleted_event, "event should be deleted and shouldnt exist")
+
+    def test_update_event(self):
+        event_exists = self.db.get_event_by_id(12345678)
+
+        self.db.update_event(
+            original_id=12345678,
+            new_id=12345679,
+            event_type='test type',
+            event_date="1998-08-03",  # "%Y-%m-%d"
+            start_time="13:00",  # "%H:%M"
+            end_time="14:00",  # "%H:%M"
+            location="test location",
+            access_control=2,
+            announcement=None
+        )
+        event_shouldnt_exist = self.db.get_event_by_id(12345678)
+        self.db.update_event(
+            original_id=12345679,
+            new_id=12345678,
+            event_type='Test Type',
+            event_date="1998-08-03",  # "%Y-%m-%d"
+            start_time="13:00",  # "%H:%M"
+            end_time="16:00",  # "%H:%M"
+            location="Test Location",
+            access_control=2,
+            announcement='Test announcement'
+        )
+
+        self.assertIsNotNone(event_exists, "event should exist ")
+        self.assertIsNone(event_shouldnt_exist, "event shouldnt exist")
+
 
 class TestAttendanceTableSqlite(unittest.TestCase):
     @classmethod
