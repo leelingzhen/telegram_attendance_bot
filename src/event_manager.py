@@ -352,7 +352,7 @@ class TrainingEventManager(EventManager):
                 access_cat=access_cat
             )
 
-        return self.attendance_to_str(data)
+        return data
 
     def curate_attendance(self, attach_usernames: int = True) -> tuple:
         """
@@ -371,24 +371,28 @@ class TrainingEventManager(EventManager):
             gender='male',
             access_cat='all'
         )
+        male_records = self.attendance_to_str(male_records)
 
         female_records = self.compile_attendance_by_cat(
             attendance=1,
             gender='female',
             access_cat='all'
         )
+        female_records = self.attendance_to_str(female_records)
 
         absentees = self.compile_attendance_by_cat(
             attendance=0,
             gender='both',
             access_cat='all'
         )
+        absentees = self.attendance_to_str(absentees)
 
         unindicated = self.compile_attendance_by_cat(
             attendance=None,
             gender='both',
             access_cat='member'
         )
+        unindicated = self.attendance_to_str(unindicated)
 
         return male_records, female_records, absentees, unindicated
 
@@ -447,10 +451,11 @@ class AdminEventManager(TrainingEventManager, EventManager):
             announcement=self.announcement,
             access_control=self.access_control,
         )
-        self.db.update_many_attendance_event_ids(
-            original_event_id=self.original_id,
-            new_event_id=self.id
-        )
+        if self.id != self.original_id:
+            self.db.update_many_attendance_event_ids(
+                original_event_id=self.original_id,
+                new_event_id=self.id
+            )
 
     def check_conflicts(self):
         """
@@ -483,25 +488,16 @@ class AdminEventManager(TrainingEventManager, EventManager):
         return False
 
     def add_new_event(self):
-        data = [
-            self.id,
-            self.event_type,
-            self.event_date.strftime("%Y-%m-%d"),
-            self.start_time.strftime("%H:%M"),
-            self.end_time.strftime("%H:%M"),
-            self.location,
-            self.announcement,
-            self.access_control,
-        ]
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)", data)
-            db.commit()
-
-    def push_event_announcement(self):
-        with sqlite3.connect(CONFIG['database']) as db:
-            data = (self.announcement, self.id)
-            db.execute("UPDATE events SET announcement = ? WHERE id = ?", data)
-            db.commit()
+        self.db.insert_event(
+            id=self.id,
+            event_type=self.event_type,
+            event_date=self.event_date.strftime("%Y-%m-%d"),
+            start_time=self.start_time.strftime("%H:%M"),
+            end_time=self.end_time.strftime("%H:%M"),
+            location=self.location,
+            announcement=self.announcement,
+            access_control=self.access_control,
+        )
 
     def push_event_to_db(self):
         if self.record_exist:
@@ -511,31 +507,16 @@ class AdminEventManager(TrainingEventManager, EventManager):
 
     def remove_event_from_record(self):
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("BEGIN TRANSACTION")
-            db.execute("DELETE FROM events WHERE id = ?", (self.original_id, ))
-            db.execute("DELETE FROM attendance WHERE event_id = ?",
-                       (self.original_id, ))
-            db.execute(
-                "DELETE FROM announcement_entities WHERE event_id = ?",
-                (self.original_id, ))
-            db.commit()
+        self.db.delete_event_by_id(self.original_id)
+        self.db.delete_announcement_entities(self.original_id)
+        self.db.delete_many_attendance_on_event(self.original_id)
 
     def push_announcement_entities(self):
         if not self.announcement_entities:
             return
-        entity_data = list()
-        for entity in self.announcement_entities:
-
-            data = (self.id, entity.type, entity.offset, entity.length)
-            entity_data.append(data)
-
         if self.announcement_entities is None:
             self.generate_entities()
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute(
-                "DELETE FROM announcement_entities WHERE event_id = ?", (self.id, ))
-            db.executemany(
-                "INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", entity_data)
-            db.commit()
+        self.db.delete_announcement_entities(event_id=self.id)
+        self.db.insert_announcement_entities(
+            event_id=self.id, entities=self.announcement_entities)

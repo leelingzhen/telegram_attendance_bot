@@ -454,6 +454,14 @@ class AttendanceTableSqlite(Sqlite):
         )
         self.con.commit()
 
+    def delete_many_attendance_on_event(self, event_id):
+        self.cur.execute("BEGIN TRANSACTION")
+        self.cur.execute(
+            'DELETE FROM attendance WHERE event_id = ?',
+            (event_id, )
+        )
+        self.con.commit()
+
 
 class AccessTableSqlite(Sqlite):
     def __init__(self):
@@ -546,7 +554,9 @@ class AnnouncementEntitySqlite(Sqlite):
         """
         self.cur.execute("BEGIN TRANSACTION")
         self.cur.execute(
-            "DELETE FROM announcement_entities WHERE event_id = ?", (event_id))
+            "DELETE FROM announcement_entities WHERE event_id = ?",
+            (event_id,)
+        )
         self.con.commit()
 
     def insert_announcement_entities(

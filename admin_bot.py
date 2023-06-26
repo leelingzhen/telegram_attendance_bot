@@ -283,15 +283,22 @@ def send_event_message(update: Update, context: CallbackContext) -> int:
 
     event.set_announcement(announcement)
     event.set_entities(msg_entities)
-    event.push_event_announcement()
+    event.push_event_to_db()
     event.push_announcement_entities()
 
     admin_msg.edit_text(
         "getting players...\n"
         )
-    send_list = event.attendance_of_members(1, "Male")
-    send_list += event.attendance_of_members(1, "Female")
-    send_list += event.unindicated_members()
+    send_list = event.compile_attendance_by_cat(
+            attendance=1,
+            gender='both',
+            access_cat='all'
+            )
+    send_list += event.compile_attendance_by_cat(
+            attendance=None,
+            gender='both',
+            access_cat="member"
+            )
 
     # #adding team managers
     # send_list += db.execute('SELECT * FROM players JOIN access_control ON players.id = access_control.player_id WHERE access_control.control_id = 7').fetchall()
@@ -379,7 +386,11 @@ def send_reminders(update: Update, context: CallbackContext) -> None:
     e_details += f" ({event_instance.event_type})"
     msg = user_instance.read_msg_from_file(e_details)
 
-    unindicated_players = event_instance.unindicated_members(event_id)
+    unindicated_players = event_instance.compile_attendance_by_cat(
+            attendance=None,
+            gender='both',
+            access_cat='member'
+            )
 
     send_message_generator = user_instance.send_message_by_list(
             unindicated_players, msg=msg, parse_mode='HTML'
