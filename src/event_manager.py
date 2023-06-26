@@ -5,6 +5,7 @@ import json
 
 from datetime import datetime, timedelta
 from telegram import MessageEntity
+import src.Database.sqlite
 
 
 with open("config.json") as f:
@@ -23,22 +24,24 @@ class AttendanceManager:
     support pulling and pushing data to the db
     """
 
-    def __init__(self, player_id, event_id):
-        self.player_id = player_id
+    def __init__(
+            self,
+            user_id,
+            event_id,
+            db=src.Database.sqlite.AttendanceTableSqlite()
+    ):
+        self.db = db
+        self.user_id = user_id
         self.event_id = event_id
         self.exists = False
         self.status = -1
         self.reason = ""
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute(
-                "SELECT status, reason FROM attendance WHERE event_id = ? and player_id = ?",
-                (event_id, player_id)).fetchone()
-            if data:
-                self.exists = True
-                self.status = data['status']
-                self.reason = data['reason']
+        attendance_data = self.db.get_attendance(user_id, event_id)
+        if attendance_data:
+            self.exists = True
+            self.status = attendance_data['status']
+            self.reason = attendance_data['reason']
 
     def get_status(self):
         return self.status
@@ -78,27 +81,20 @@ class AttendanceManager:
         push attendance update to the db
         """
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("BEGIN TRANSACTION")
-            if self.record_exists():
-                data = (self.status,
-                        self.reason,
-                        self.event_id,
-                        self.player_id
-                        )
-                db.execute(
-                    "UPDATE attendance SET status = ?, reason = ? WHERE event_id = ? AND player_id = ?", data)
-            else:
-                data = (
-                    self.event_id,
-                    self.player_id,
-                    self.status,
-                    self.reason,
-                )
-                db.execute(
-                    "INSERT INTO attendance (event_id, player_id, status, reason) VALUES (?, ?, ?, ?)", data)
-            db.commit()
+        if self.record_exists():
+            self.db.update_attendance(
+                user_id=self.user_id,
+                event_id=self.event_id,
+                status=self.status,
+                reason=self.reason
+            )
+        else:
+            self.db.insert_attendance(
+                user_id=self.user_id,
+                event_id=self.event_id,
+                status=self.status,
+                reason=self.reason
+            )
 
 
 class EventManager:
@@ -110,7 +106,15 @@ class EventManager:
     other wise class fields will be all empty
     """
 
-    def __init__(self, event_id: int, record_exist=False):
+    def __init__(
+            self,
+            event_id: int,
+            record_exist=False,
+            db=src.Database.sqlite.SqliteEventManager()
+    ):
+        # DB connector
+        self.db = db
+
         self.id = event_id
         self.record_exist = record_exist
 
@@ -151,7 +155,7 @@ class EventManager:
         only use either of the args
         """
         if id and event_date:
-            raise "Only use one of the fields"
+            raise SyntaxError("only use one of the fields")
         if event_date:
             id = event_date.strftime("%Y%m%d%H%M")
         self.id = id
@@ -169,9 +173,9 @@ class EventManager:
         """
         event_date = self.event_date
         event_date = event_date.replace(
-                hour=end_time.hour,
-                minute=end_time.minute
-                )
+            hour=end_time.hour,
+            minute=end_time.minute
+        )
         return event_date
 
     def set_event_end(self, event_end: datetime):
@@ -192,25 +196,16 @@ class EventManager:
     def generate_entities(self):
         entities = list()
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-
-            data = db.execute(
-                "SELECT * FROM announcement_entities WHERE event_id = ?", (
-                    self.id, )
-            ).fetchall()
-
-            if data is None:
-                return None
-
-            for entity in data:
-                entities.append(
-                    MessageEntity(
-                        type=entity['entity_type'],
-                        offset=entity['offset'],
-                        length=entity['entity_length']
-                    )
+        data = self.db.get_announcement_entities(self.id)
+        for entity in data:
+            entities.append(
+                MessageEntity(
+                    type=entity['entity_type'],
+                    offset=entity['offset'],
+                    length=entity['entity_length']
                 )
+            )
+
         self.announcement_entities = entities
         return entities
 
@@ -231,37 +226,32 @@ class EventManager:
 
         returns: bool = True if record exists
         """
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute(
-                "SELECT * FROM events WHERE id = ?", (self.id, )).fetchone()
-            if data is None:
-                self.record_exist = False
-                return False
+        data = self.db.get_event_by_id(self.id)
+        if not data:
+            return False
 
-            # event end timing, type datetime
-            self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
-            self.start_time = datetime.strptime(data["start_time"], "%H:%M")
-            self.end_time = datetime.strptime(data["end_time"], "%H:%M")
-            self.event_type = data["event_type"]
-            self.announcement = data["announcement"]  # str
-            self.location = data["location"]
-            self.announcement_entities = None  # list of telegram.Message
-            self.access_control = data["access_control"]  # type int
+        # event end timing, type datetime
+        self.event_date = datetime.strptime(data["event_date"], "%Y-%m-%d")
+        self.start_time = datetime.strptime(data["start_time"], "%H:%M")
+        self.end_time = datetime.strptime(data["end_time"], "%H:%M")
+        self.event_type = data["event_type"]
+        self.announcement = data["announcement"]  # str
+        self.location = data["location"]
+        self.announcement_entities = None  # list of telegram.Message
+        self.access_control = data["access_control"]  # type int
 
-            self.record_exist = True
-            self.correct_event_date()
-            return True
+        self.record_exist = True
+        self.correct_event_date()
+        return True
 
     def correct_event_date(self):
         event_date = self.event_date
         event_date = event_date.replace(
             hour=self.start_time.hour,
             minute=self.start_time.minute
-            )
+        )
         self.event_date = event_date
         self.start_time = event_date
-
 
 
 class TrainingEventManager(EventManager):
@@ -299,118 +289,16 @@ class TrainingEventManager(EventManager):
 
         return output
 
-    def get_event_by_id(self, id: int) -> AttendanceManager:
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event = db.execute(
-                "SELECT * FROM events WHERE id = ?", (id, )).fetchone()
-        return event
-
-    def attendance_of_members(self,
-                              attendance: int,
-                              gender: str,
-                              event_id: int = None,
-                              ):
-        """
-        query attendance from db
-        event_id: format %Y%m%d%H%M
-        attendance: 1 for attending 0 for absentees
-        gender: either Male or Female
-        """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                SELECT
-                    id, name, gender, telegram_user,
-                    access_control.control_id,
-                    attendance.status, attendance.reason
-                FROM players
-                JOIN attendance on players.id = attendance.player_id
-                JOIN access_control on players.id = access_control.player_id
-                WHERE event_id = ?
-                AND players.hidden = 0
-                AND access_control.control_id != 7
-                AND attendance.status = ?
-                AND gender = ?
-                AND access_control.control_id > 3
-                ORDER BY
-                players.name,
-                players.gender DESC
-
-                       """, (event_id, attendance, gender,)).fetchall()
-        return player_data
-
-    def attendance_of_guests(self,
-                             attendance: int,
-                             gender: str,
-                             event_id: int = None,
-                             ):
-        """
-        query attendance from db
-        event_id: format %Y%m%d%H%M
-        attendance: 1 for attending 0 for absentees
-        gender: either Male or Female
-        """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                SELECT
-                    id, name, gender, telegram_user,
-                    access_control.control_id,
-                    attendance.status, attendance.reason
-                FROM players
-                JOIN attendance on players.id = attendance.player_id
-                JOIN access_control on players.id = access_control.player_id
-                WHERE event_id = ?
-                AND players.hidden = 0
-                AND attendance.status = ?
-                AND gender = ?
-                AND access_control.control_id >= 2
-                AND access_control.control_id <4
-                ORDER BY
-                players.name COLLATE NOCASE,
-                players.gender DESC
-
-                       """, (event_id, attendance, gender,)).fetchall()
-        return player_data
-
     def unindicated_members(self, event_id: int = None) -> sqlite3.Row:
         """
         returns a list of unindicated members
         """
-        if event_id is None:
-            event_id = self.id
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            player_data = db.execute("""
-                    SELECT id, name, telegram_user,
-                    access_control.control_id
-                    FROM players
-                    JOIN access_control on players.id = access_control.player_id
-                    WHERE name NOT IN
-                    (
-                        SELECT name FROM players
-                        JOIN attendance ON players.id = attendance.player_id
-                        JOIN access_control ON players.id = access_control.player_id
-                        WHERE event_id=?
-                    )
-                    AND notification == 1
-                    AND access_control.control_id >= 4
-                    AND access_control.control_id != 7
-                    AND players.hidden = 0
-                    ORDER BY
-                    players.gender DESC,
-                    players.name COLLATE NOCASE
-
-                             """, (self.id, )).fetchall()
+        player_data = self.db.get_unindicated_users(
+            event_id=self.id, access_cat='members')
         return player_data
 
     def attendance_to_str(self,
-                          player_data: sqlite3.Row,
+                          user_data: sqlite3.Row,
                           attach_usernames: bool = False
                           ) -> list:
         """
@@ -419,13 +307,13 @@ class TrainingEventManager(EventManager):
 
         formatted_attendance = list()
 
-        for record in player_data:
+        for record in user_data:
             entry = record['name']
 
             if "reason" not in record.keys():
                 pass
             elif record["reason"] != "":
-                entry += f"({record['reason']})"
+                entry += f" ({record['reason']})"
 
             if record['control_id'] < 4:
                 entry = f"(guest) {entry}"
@@ -442,6 +330,30 @@ class TrainingEventManager(EventManager):
 
         return formatted_attendance
 
+    def compile_attendance_by_cat(
+            self,
+            attendance: int,
+            gender: str,
+            access_cat: str = 'all'
+    ):
+        """
+        attendance can be int or none
+        """
+        if attendance is not None:
+            data = self.db.get_users_on_attendance_access(
+                event_id=self.id,
+                attendance=attendance,
+                gender=gender,
+                access_cat=access_cat
+            )
+        else:
+            data = self.db.get_unindicated_users(
+                event_id=self.id,
+                access_cat=access_cat
+            )
+
+        return data
+
     def curate_attendance(self, attach_usernames: int = True) -> tuple:
         """
         queries all the attendance for the said event
@@ -454,30 +366,33 @@ class TrainingEventManager(EventManager):
         absentees = list()
         unindicated = list()
 
-        male_members = self.attendance_of_members(attendance=1, gender="Male")
-        male_records = self.attendance_to_str(male_members)
+        male_records = self.compile_attendance_by_cat(
+            attendance=1,
+            gender='male',
+            access_cat='all'
+        )
+        male_records = self.attendance_to_str(male_records)
 
-        male_guests = self.attendance_of_guests(attendance=1, gender="Male")
-        male_records += self.attendance_to_str(male_guests)
+        female_records = self.compile_attendance_by_cat(
+            attendance=1,
+            gender='female',
+            access_cat='all'
+        )
+        female_records = self.attendance_to_str(female_records)
 
-        female_members = self.attendance_of_members(
-            attendance=1, gender="Female")
-        female_records = self.attendance_to_str(female_members)
-
-        female_guests = self.attendance_of_guests(
-            attendance=1, gender="Female")
-        female_records += self.attendance_to_str(female_guests)
-
-        absentees = self.attendance_of_members(attendance=0, gender="Male")
-        absentees += self.attendance_of_members(attendance=0, gender="Female")
-        absentees += self.attendance_of_guests(attendance=0, gender="Male")
-        absentees += self.attendance_of_guests(attendance=0, gender="Female")
-
+        absentees = self.compile_attendance_by_cat(
+            attendance=0,
+            gender='both',
+            access_cat='all'
+        )
         absentees = self.attendance_to_str(absentees)
 
-        unindicated = self.unindicated_members()
-        unindicated = self.attendance_to_str(
-            unindicated, attach_usernames=attach_usernames)
+        unindicated = self.compile_attendance_by_cat(
+            attendance=None,
+            gender='both',
+            access_cat='member'
+        )
+        unindicated = self.attendance_to_str(unindicated)
 
         return male_records, female_records, absentees, unindicated
 
@@ -525,28 +440,22 @@ class AdminEventManager(TrainingEventManager, EventManager):
         self.announcement_entities = entities
 
     def update_event_records(self):
-        data = [
-            self.id,
-            self.event_type,
-            self.event_date.strftime("%Y-%m-%d"),
-            self.start_time.strftime("%H:%M"),
-            self.end_time.strftime("%H:%M"),
-            self.location,
-            self.announcement,
-            self.access_control,
-            self.original_id
-        ]
-
-        with sqlite3.connect(CONFIG['database']) as db:
-            # updating events table
-            db.execute(
-                "UPDATE events SET id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, announcement = ?, access_control = ? WHERE id = ?", data)
-
-            # updating attendance table
-            db.execute(
-                "UPDATE attendance SET event_id = ? WHERE event_id = ?", (self.id, self.original_id))
-
-            db.commit()
+        self.db.update_event(
+            new_id=self.id,
+            original_id=self.original_id,
+            event_type=self.event_type,
+            event_date=self.event_date.strftime("%Y-%m-%d"),
+            start_time=self.start_time.strftime("%H:%M"),
+            end_time=self.end_time.strftime("%H:%M"),
+            location=self.location,
+            announcement=self.announcement,
+            access_control=self.access_control,
+        )
+        if self.id != self.original_id:
+            self.db.update_many_attendance_event_ids(
+                original_event_id=self.original_id,
+                new_event_id=self.id
+            )
 
     def check_conflicts(self):
         """
@@ -563,49 +472,32 @@ class AdminEventManager(TrainingEventManager, EventManager):
 
         """
 
+        data = self.db.get_event_by_id(self.id)
         # check conflicts when updating cur event
         if self.record_exist and self.original_id != self.id:
-            with sqlite3.connect(CONFIG['database']) as db:
-                db.row_factory = sqlite3.Row
-
-                data = db.execute('SELECT * FROM events WHERE id = ?',
-                                  (self.id, )).fetchall()
-                if data:
-                    return True
+            if data:
+                return True
 
         # checking conflicts when inserting a new event
         if not self.record_exist:
-            with sqlite3.connect(CONFIG['database']) as db:
-                db.row_factory = sqlite3.Row
-                data = db.execute('SELECT * FROM events WHERE id = ?',
-                                  (self.id, )).fetchall()
-                if data:
-                    return True
+            if data:
+                return True
 
         # at this time, the record exists but there is no change to the
         # datetime, return False
         return False
 
     def add_new_event(self):
-        data = [
-            self.id,
-            self.event_type,
-            self.event_date.strftime("%Y-%m-%d"),
-            self.start_time.strftime("%H:%M"),
-            self.end_time.strftime("%H:%M"),
-            self.location,
-            self.announcement,
-            self.access_control,
-        ]
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)", data)
-            db.commit()
-
-    def push_event_announcement(self):
-        with sqlite3.connect(CONFIG['database']) as db:
-            data = (self.announcement, self.id)
-            db.execute("UPDATE events SET announcement = ? WHERE id = ?", data)
-            db.commit()
+        self.db.insert_event(
+            id=self.id,
+            event_type=self.event_type,
+            event_date=self.event_date.strftime("%Y-%m-%d"),
+            start_time=self.start_time.strftime("%H:%M"),
+            end_time=self.end_time.strftime("%H:%M"),
+            location=self.location,
+            announcement=self.announcement,
+            access_control=self.access_control,
+        )
 
     def push_event_to_db(self):
         if self.record_exist:
@@ -615,31 +507,16 @@ class AdminEventManager(TrainingEventManager, EventManager):
 
     def remove_event_from_record(self):
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("BEGIN TRANSACTION")
-            db.execute("DELETE FROM events WHERE id = ?", (self.original_id, ))
-            db.execute("DELETE FROM attendance WHERE event_id = ?",
-                       (self.original_id, ))
-            db.execute(
-                "DELETE FROM announcement_entities WHERE event_id = ?",
-                (self.original_id, ))
-            db.commit()
+        self.db.delete_event_by_id(self.original_id)
+        self.db.delete_announcement_entities(self.original_id)
+        self.db.delete_many_attendance_on_event(self.original_id)
 
     def push_announcement_entities(self):
         if not self.announcement_entities:
             return
-        entity_data = list()
-        for entity in self.announcement_entities:
-
-            data = (self.id, entity.type, entity.offset, entity.length)
-            entity_data.append(data)
-
         if self.announcement_entities is None:
             self.generate_entities()
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute(
-                "DELETE FROM announcement_entities WHERE event_id = ?", (self.id, ))
-            db.executemany(
-                "INSERT INTO announcement_entities VALUES (?, ?, ?, ?)", entity_data)
-            db.commit()
+        self.db.delete_announcement_entities(event_id=self.id)
+        self.db.insert_announcement_entities(
+            event_id=self.id, entities=self.announcement_entities)

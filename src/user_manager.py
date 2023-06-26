@@ -5,6 +5,8 @@ import json
 
 from datetime import date, datetime
 
+# from src.Database.sqlite import SqliteUserManager
+import src.Database.sqlite
 from telegram.bot import Bot
 from telegram.error import Unauthorized, BadRequest
 import telegram.message
@@ -29,15 +31,26 @@ class UserObj:
 
 
 class UserManager:
-    def __init__(self, user: dict):
+    def __init__(
+            self,
+            user: dict = None,
+            db=src.Database.sqlite.SqliteUserManager()
+    ):
         """
         intialise user from telegram message context
+        Args:
+            user: optional if empty, it will not have telegram context fields
+            db : the type of db to be used
         """
-        self.username = user['username']
-        self.id = user['id']
-        self.first_name = user['first_name']
-        self.is_bot = user['is_bot']
-        self.access = self.get_user_access()
+        # importing connector
+        self.db = db
+
+        if user:
+            self.username = user['username']
+            self.id = user['id']
+            self.first_name = user['first_name']
+            self.is_bot = user['is_bot']
+            self.access = self.get_user_access()
 
         self.name = None
         self.telegram_user = None
@@ -54,13 +67,12 @@ class UserManager:
         self.notification = notification
 
     def get_exisiting_name(self, name):
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = (name, self.id)
-            similar_names = db.execute(
-                "SELECT telegram_user FROM players WHERE name = ? AND id != ?", data).fetchone()
-        if similar_names:
-            return "@" + similar_names['telegram_user']
+        user_data = self.db.get_user_by_id(
+            id=self.id,
+            name=name
+        )
+        if user_data:
+            return "@" + user_data['telegram_user']
         return None
 
     def set_name(self, name):
@@ -70,19 +82,15 @@ class UserManager:
         self.telegram_user = self.username
 
     def push_update_user(self):
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.execute("BEGIN TRANSACTION")
-            db.execute("UPDATE players SET name = ?, notification = ? WHERE id = ?",
-                       (self.name, self.notification, self.id))
-            db.commit()
+        self.db.update_user(
+            id=self.id,
+            name=self.name,
+            notification=self.notification
+        )
 
     def push_new_user(self):
-        db.execute("BEGIN TRANSACTION")
-        data = (self.name, self.gender, self.id)
-        db.execute('UPDATE players SET name = ?, gender = ? WHERE id = ?', data)
-        data = (1, self.id)
-        db.execute('UPDATE access_control SET control_id=? WHERE player_id = ?', data)
-        db.commit()
+        self.db.update_user(id=self.id, name=self.name, gender=self.gender)
+        self.db.update_access(user_id=self.id, new_access=1)
 
     def retrieve_user_data(self) -> list:
         """
@@ -90,24 +98,18 @@ class UserManager:
         returns user profiles in a list
 
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            user_profile = db.execute(
-                "SELECT * FROM players WHERE id = ?",
-                (self.id,)
-            ).fetchone()
+        user_profile = self.db.get_user_by_id(id=self.id)
+        if user_profile is None:
+            self.cache_new_user()
 
-            if user_profile is None:
-                self.cache_new_user()
+        self.name = user_profile['name']
+        self.telegram_user = user_profile['telegram_user']
+        self.hidden = user_profile['hidden']
+        self.gender = user_profile['gender']
+        self.notification = user_profile['notification']
+        self.language = user_profile['language_pack']
 
-            self.name = user_profile['name']
-            self.telegram_user = user_profile['telegram_user']
-            self.hidden = user_profile['hidden']
-            self.gender = user_profile['gender']
-            self.notication = user_profile['notification']
-            self.language = user_profile['language_pack']
-
-            return user_profile
+        return user_profile
 
     def username_tally(self):
         """
@@ -121,17 +123,8 @@ class UserManager:
         """
         updates the database when a new user uses the bot
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.execute("BEGIN TRANSACTION")
-            data = [self.id, self.username]
-            db.execute(
-                "INSERT INTO players(id, telegram_user) VALUES (?, ?)", data)
-
-            # insert into access control
-            data = [self.id, 0]
-            db.execute(
-                "INSERT INTO access_control (player_id, control_id ) VALUES (?,?)", data)
-            db.commit()
+        self.db.insert_user(id=self.id, telegram_user=self.username)
+        self.db.insert_access(user_id=self.id, access=0)
         return None
 
     def get_user_access(self) -> int:
@@ -139,13 +132,10 @@ class UserManager:
         get the access of the player
         returns an int
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            access = db.execute(
-                "SELECT control_id FROM access_control WHERE player_id = ?", (self.id,)).fetchone()
-
+        access = self.db.get_access(self.id)
         if not access:
             return 0
-        return access[0]
+        return access['control_id']
 
     def parse_access_control_description(self, access=None):
         if self.access is None:
@@ -153,13 +143,8 @@ class UserManager:
         if access is None:
             access = self.access
 
-        with sqlite3.connect(CONFIG["database"]) as db:
-            position = db.execute(
-                "SELECT * FROM access_control_description WHERE id = ?", (
-                    access, )
-            ).fetchone()[1]
-
-            return position
+        position = self.db.get_position(access)
+        return position
 
     def get_event_dates(self,
                         from_date: date = 0) -> sqlite3.Row:
@@ -170,11 +155,11 @@ class UserManager:
         if from_date == 0:
             from_date = date.today()
         event_id = from_date.strftime('%Y%m%d%H%M')
+        event_data = self.db.get_future_events(
+            event_id=event_id,
+            access=self.access
+        )
 
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            event_data = db.execute(
-                "SELECT id, event_type FROM events WHERE id > ? AND access_control <= ? ORDER BY id", (event_id, self.access)).fetchall()
         return event_data
 
     def attending_events(self, from_date: datetime = None) -> dict:
@@ -185,30 +170,23 @@ class UserManager:
             from_date = date.today()
         event_id = from_date.strftime('%Y%m%d%H%M')
 
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            data = db.execute("""
-                    SELECT id, event_type FROM events
-                    JOIN attendance ON events.id = attendance.event_id
-                    WHERE attendance.player_id = ?
-                    AND attendance.event_id >= ?
-                    AND attendance.status = ?
-                    AND events.access_control <= ?
-                    ORDER BY id
-                                          """,
-                              (self.id, event_id, 1, self.access)
-                              ).fetchall()
-            # sorting by categories
-            dict_date = {}
+        data = self.db.get_attending_events(
+            user_id=self.id,
+            event_id=event_id,
+            access=self.access
+        )
 
-            for row_obj in data:
-                event_type = row_obj["event_type"]
-                if event_type not in dict_date:
-                    dict_date[event_type] = list()
+        # sorting by categories
+        dict_date = {}
 
-                event_date = datetime.strptime(
-                    str(row_obj["id"]), '%Y%m%d%H%M')
-                dict_date[event_type].append(event_date)
+        for row_obj in data:
+            event_type = row_obj["event_type"]
+            if event_type not in dict_date:
+                dict_date[event_type] = list()
+
+            event_date = datetime.strptime(
+                str(row_obj["id"]), '%Y%m%d%H%M')
+            dict_date[event_type].append(event_date)
 
         return dict_date
 
@@ -218,6 +196,8 @@ class PlayerAccessRecord(UserManager):
         """
         initialise user from id from db
         """
+        UserManager.__init__(self)
+
         self.id = id
         self.retrieve_user_data()
         self.access = self.get_user_access()
@@ -258,20 +238,7 @@ class AdminUser(UserManager):
 
         """
         access = 4 if only_members else 2
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            query = (access, only_active)
-            data = db.execute("""
-                SELECT * FROM players
-                JOIN access_control ON players.id = access_control.player_id
-                WHERE access_control.control_id >= ?
-                AND players.notification >= ?
-                AND players.hidden = 0
-                ORDER BY
-                gender DESC,
-                name
-                            """, query).fetchall()
-
+        data = self.db.get_users_list(access=access, notification=only_members)
         return data
 
     def intercept_msg(self, msg, msg_entities, parse_mode):
@@ -357,12 +324,9 @@ class AdminUser(UserManager):
         based on the access control of the admin user,
         get the levels of access available to the user
         """
-        with sqlite3.connect(CONFIG["database"]) as db:
-            db.row_factory = sqlite3.Row
-            access_data = db.execute(
-                'SELECT * FROM access_control_description WHERE id <= 100 ORDER BY id').fetchall()
+        access_data = self.db.get_access_levels()
 
-        if self.access == 100:
+        if self.access != 100:
             access_data = access_data[1:8]
         return access_data
 
@@ -370,18 +334,8 @@ class AdminUser(UserManager):
         """
         return user ids and name based on the access selected
         """
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            players = db.execute("""
-                    SELECT id, name FROM players
-                    JOIN access_control ON players.id = access_control.player_id
-                    WHERE control_id = ?
-                    ORDER BY
-                    name COLLATE NOCASE
-                    """,
-                                 (access, )
-                                 ).fetchall()
-        return players
+        users = self.db.get_users_join_on_access(access)
+        return users
 
     def read_msg_from_file(self, date_str: str) -> str:
         """
@@ -397,7 +351,7 @@ class AdminUser(UserManager):
         return PlayerAccessRecord(id)
 
     def push_player_access(self, player: PlayerAccessRecord):
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.execute("UPDATE access_control SET control_id = ? WHERE player_id = ?",
-                       (player.new_access, player.id))
-            db.commit()
+        self.db.update_access(
+            user_id=player.id,
+            new_access=player.new_access
+        )

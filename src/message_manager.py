@@ -99,26 +99,20 @@ class KaypohMessage(MessageObject, TrainingEventManager):
         """
         based on the chat_id and event_id, check if the record exists
         """
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            data = (self.chat_id, self.id)
-            record = db.execute(
-                "SELECT * FROM kaypoh_messages WHERE player_id = ? and event_id = ?",
-                data).fetchone()
+        record = self.db.get_msg_records(
+            event_id=self.id, user_id=self.chat_id)
 
-        return record is not None
+        return len(record) > 0
 
     def add_new_record(self):
-        with sqlite3.connect(CONFIG['database']) as db:
-            data = (self.chat_id, self.message_id, self.id)
-            db.execute(
-                'INSERT INTO kaypoh_messages(player_id, message_id, event_id) VALUES (?, ?, ?)', data)
+        self.db.insert_msg_record(
+            user_id=self.chat_id, message_id=self.message_id, event_id=self.id)
 
     def update_record(self):
-        with sqlite3.connect(CONFIG['database']) as db:
-            data = (self.message_id, self.chat_id, self.id)
-            db.execute(
-                'UPDATE kaypoh_messages SET message_id = ? WHERE player_id = ? and event_id = ?', data)
+        self.db.update_msg_record(
+            user_id=self.chat_id,
+            message_id=self.message_id,
+            event_id=self.id)
 
     def push_record(self):
 
@@ -156,10 +150,7 @@ class KaypohMessageHandler(KaypohMessage):
         self.fill_text_fields(rendered_date)
 
     def get_records(self):
-        with sqlite3.connect(CONFIG['database']) as db:
-            db.row_factory = sqlite3.Row
-            self.records = db.execute('SELECT * FROM kaypoh_messages WHERE event_id = ?',
-                                      (self.id, )).fetchall()
+        self.records = self.db.get_msg_records(event_id=self.id)
 
     def n_records(self):
         """
