@@ -13,6 +13,5 @@ RUN pip3 install .
 
 COPY ./resources ./resources
 COPY ./training_bot.py ./training_bot.py
-COPY ./helpers.py ./helpers.py
 COPY ./config.json ./config.json
 CMD ["python", "./training_bot.py"]
