@@ -1,9 +1,10 @@
 {
     "development": 1,
-    "database":"resources/attendance.db",
-    "team_name" : "Alliance",
-    "training_bot_name" : "@alliance_training_bot",
+    "database": "resources/attendance.db",
+    "team_name": "Alliance",
+    "training_bot_name": "@alliance_training_bot",
     "use_webhook": 0,
     "training_bot_url": "",
-    "admin_bot_url": ""
+    "admin_bot_url": "",
+    "version": 2.1
 }
