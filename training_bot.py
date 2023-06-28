@@ -3,6 +3,7 @@ import os
 import json
 import sqlite3
 import src.utils as utils
+import src.Upgrade.upgrade_manager
 
 from datetime import datetime
 from functools import wraps
@@ -944,6 +945,16 @@ def main():
         token = bot_tokens["dev_bot"]
     else:
         token = bot_tokens["training_bot"]
+
+    # upgrade if there is
+    version = src.Upgrade.upgrade_manager.UpgradeManager(
+            config=CONFIG, cur_ver=2.1
+            )
+    updated = version.update_system()
+    if updated:
+        logger.info("system has been updated. to %.2f", version.cur_ver)
+    else:
+        logger.info("no updates found. continuing...")
 
     commands = [
             BotCommand("start", "to start the bot"),
