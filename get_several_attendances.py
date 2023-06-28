@@ -6,6 +6,8 @@ import helpers
 import csv
 from datetime import datetime
 
+from src.event_manager import TrainingEventManager
+
 
 db = sqlite3.connect("resources/attendance.db", check_same_thread=False)
 
@@ -23,19 +25,18 @@ def get_attendance(event_id_list: list) -> dict:
     output = dict()
     for event_id in event_id_list:
 
-        with open('resources/saved_sql_queries/available_attendance.sql') as f:
-            sql_query = f.read()
-            db.row_factory = sqlite3.Row
-            result = db.execute(sql_query, (event_id, )).fetchall()
-        player_data = helpers.sql_to_dict(result)
+        event = TrainingEventManager(event_id=event_id)
 
-        with open('resources/saved_sql_queries/unindicated_players.sql') as f:
-            sql_query = f.read()
-            db.row_factory = lambda cursor, row: row[1]
-            uninidicated_players = db.execute(
-                sql_query, (event_id, )).fetchall()
+        male_records, female_records, absent, unindicated = event.curate_attendance(
+            attach_usernames=False)
 
-        player_data['unindicated'] = uninidicated_players
+        player_data = {
+                'Male': male_records,
+                'Female': female_records,
+                'Absent': absent,
+                'unindicated': unindicated
+                }
+
         output[event_id] = player_data
     return output
 
@@ -45,7 +46,7 @@ def write_csv_attendance(
         target_month: str,
         out_file: str) -> None:
 
-    if out_file == None:
+    if out_file is None:
         out_file = os.path.expanduser(os.path.join(
             "~", 'Desktop', f'attendance_{target_month}.csv'))
 
@@ -82,7 +83,7 @@ def main():
     parser.add_argument("--month", type=str, help='input a month year format in the form mm-yy',
                         default=datetime.now().strftime("%m-%y"))
     parser.add_argument("--weekday", type=int,
-                        help="input and int that corresponds to the weekday", default=None)
+                        help="input an int that corresponds to the weekday", default=None)
     parser.add_argument("--out_file", type=str,
                         help="outpath to the file created", default=None)
     args = parser.parse_args()

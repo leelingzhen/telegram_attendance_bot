@@ -99,7 +99,7 @@ def start(update: Update, context: CallbackContext)-> None:
 def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_instance = UserManager(user)
-    helpers.refresh_player_profiles(update, context)
+    user_instance.update_telegram_user()
 
     logger.info("user %s is choosing date...", user.first_name)
 
@@ -127,7 +127,7 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
 def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_instance = UserManager(user)
-    helpers.refresh_player_profiles(update, context)
+    user_instance.update_telegram_user()
 
     logger.info("user %s is choosing date...", user.first_name)
     event_data = user_instance.get_event_dates()
@@ -338,9 +338,8 @@ def update_kaypoh_messages(context: CallbackContext):
 @send_typing_action
 def choosing_more_dates(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
-    helpers.refresh_player_profiles(update, context)
-
     user_instance = UserManager(user)
+    user_instance.update_telegram_user()
 
     logger.info("user %s used /attendance_plus...", user.first_name)
 

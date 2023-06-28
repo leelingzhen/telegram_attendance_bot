@@ -92,6 +92,14 @@ class UserManager:
         self.db.update_user(id=self.id, name=self.name, gender=self.gender)
         self.db.update_access(user_id=self.id, new_access=1)
 
+    def update_telegram_user(self):
+        if self.telegram_user is None:
+            self.retrieve_user_data()
+
+        if not self.username_tally():
+            self.set_telegram_user()
+            self.db.update_user(id=self.id, telegram_user=self.telegram_user)
+
     def retrieve_user_data(self) -> list:
         """
         retrieve user data from the db
