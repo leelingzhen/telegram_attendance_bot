@@ -13,6 +13,5 @@ RUN pip3 install .
 
 COPY ./resources ./resources
 COPY ./admin_bot.py ./admin_bot.py
-COPY ./helpers.py ./helpers.py
 COPY ./config.json ./config.json
 CMD ["python", "./admin_bot.py"]

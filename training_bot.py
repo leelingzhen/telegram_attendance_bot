@@ -1,8 +1,8 @@
 import logging
 import os
-import helpers
 import json
 import sqlite3
+import src.utils as utils
 
 from datetime import datetime
 from functools import wraps
@@ -109,7 +109,7 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     context.user_data["page"] = 0
     context.user_data["user_instance"] = user_instance
 
-    reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
+    reply_markup = InlineKeyboardMarkup(utils.date_buttons(event_data, 0))
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
@@ -136,7 +136,7 @@ def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     context.user_data["page"] = 0
     context.user_data['user_instance'] = user_instance
 
-    reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
+    reply_markup = InlineKeyboardMarkup(utils.date_buttons(event_data, 0))
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
@@ -156,7 +156,7 @@ def page_change(update: Update, context: CallbackContext) -> int:
 
     context.user_data["page"] += scroll_val
     reply_markup = InlineKeyboardMarkup(
-            helpers.date_buttons(
+            utils.date_buttons(
                 context.user_data["event_data"],
                 page_num=context.user_data["page"])
             )
@@ -275,7 +275,7 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
     else:
         # retrieve reasons, went through give_reason
         reason = update.message.text
-        reason = helpers.escape_html_tags(reason)
+        reason = utils.escape_html_tags(reason)
         attendance.set_reason(reason)
         bot_message = update.message.reply_text(
                 text=text
@@ -302,7 +302,7 @@ Attendance: {'Yes' if attendance.status else 'No'}
 
     bot_message.edit_text(text=text + bot_comment, parse_mode='html')
 
-    if helpers.resend_announcement(prev_status,
+    if utils.resend_announcement(prev_status,
                                    event_instance.announcement,
                                    user_instance.access):
 
@@ -354,7 +354,7 @@ def choosing_more_dates(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
         return ConversationHandler.END
 
-    buttons = helpers.date_buttons(event_data, pages=False)
+    buttons = utils.date_buttons(event_data, pages=False)
     buttons.append([
         InlineKeyboardButton(text='Confirm', callback_data='forward'),
         ])
@@ -400,7 +400,7 @@ def choosing_more_dates_cont(update: Update, context: CallbackContext) -> int:
         text += datetime.strptime(str(element), '%Y%m%d%H%M').strftime('%-d-%b-%-y, %a @ %-I:%M%p') + "\n"
 
     # make buttons
-    buttons = helpers.date_buttons(event_data, pages=False)
+    buttons = utils.date_buttons(event_data, pages=False)
     buttons.append([
         InlineKeyboardButton(text='Confirm', callback_data='forward'),
         ])
@@ -478,7 +478,7 @@ def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
     if gave_reason:
         # indicated attendance is yes skipped give_reason_more
         reason = update.message.text
-        reason = helpers.escape_html_tags(reason)
+        reason = utils.escape_html_tags(reason)
         bot_message = update.message.reply_text(
                 text=text
                 )

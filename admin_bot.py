@@ -1,8 +1,8 @@
 import logging
 import os
-import helpers
 import json
 import sqlite3
+import src.utils as utils
 
 from datetime import datetime
 from functools import wraps
@@ -104,7 +104,7 @@ def choosing_date(update: Update, context: CallbackContext) -> int:
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
 
-    reply_markup = InlineKeyboardMarkup(helpers.date_buttons(event_data, 0))
+    reply_markup = InlineKeyboardMarkup(utils.date_buttons(event_data, 0))
     # if there are no queried trainings
     if event_data == list():
         update.message.reply_text("There are no more further planned events. Please add a new one using!/event_administration")
@@ -123,7 +123,7 @@ def page_change(update: Update, context: CallbackContext) -> int:
     scroll_val = int(query.data)
 
     context.user_data["page"] += scroll_val
-    reply_markup = InlineKeyboardMarkup(helpers.date_buttons(context.user_data["event_data"], page_num=context.user_data["page"]))
+    reply_markup = InlineKeyboardMarkup(utils.date_buttons(context.user_data["event_data"], page_num=context.user_data["page"]))
     query.edit_message_reply_markup(
             reply_markup=reply_markup
             )
@@ -423,7 +423,7 @@ def choosing_date_administration(update: Update, context: CallbackContext) -> in
 
     event_data = user_instance.get_event_dates()
 
-    buttons = helpers.date_buttons(event_data, pages=False)
+    buttons = utils.date_buttons(event_data, pages=False)
     buttons.append(
                 [
                     InlineKeyboardButton(text="Add Event", callback_data='add'),
