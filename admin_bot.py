@@ -556,6 +556,7 @@ access : {event_instance.access_control}
 @secure(access=5)
 @send_typing_action
 def event_menu(update: Update, context: CallbackContext) -> int:
+    is_query = context.user_data['is_query']
     prev_form = context.user_data['form']  # data is 'query' or 'datetime' or 'time'
     event_instance = context.user_data['event_instance']
 
@@ -571,45 +572,46 @@ def event_menu(update: Update, context: CallbackContext) -> int:
                     InlineKeyboardButton(text='Confirm Changes', callback_data='forward')
                     ]
                 ]
-    if prev_form == "rejected":
-        query = update.callback_query
-        query.answer()
-        bot_message = query.edit_message_text('returning to event menu...')
 
-    elif prev_form == 'query':
+    if is_query:
         query = update.callback_query
         query.answer()
         bot_message = query.edit_message_text('parsing new changes...')
-        field, val = query.data.split(',')
-        if field == 'access_control':
-            event_instance.set_access(int(val))
-        elif field == 'event_type':
-            event_instance.set_event_type(val)
-
+        data = query.data
     else:
-
         bot_message = update.message.reply_text('parsing new changes...')
-        if prev_form == "datetime":
-            try:
-                event_date = datetime.strptime(update.message.text, "%d-%m-%Y@%H%M")
+        data = update.message.text
 
-            except ValueError:
-                text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
-            else:
-                event_instance.set_event_date(event_date)
-                event_instance.set_id(event_date=event_date)
+    if prev_form == "rejected":
+        bot_message.edit_text('returning to event menu...')
 
-        elif prev_form == "time":
-            try:
-                event_time = datetime.strptime(update.message.text, "%H%M")
-            except ValueError:
-                text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
-            else:
-                event_time = event_instance.replace_end_time(event_time)
-                event_instance.set_event_end(event_time)
+    elif prev_form == 'event_type':
+        event_instance.set_event_type(data)
 
-        elif prev_form == 'location':
-            event_instance.set_location(update.message.text)
+    elif prev_form == 'access':
+        event_instance.set_access(int(data))
+
+    elif prev_form == "datetime":
+        try:
+            event_date = datetime.strptime(update.message.text, "%d-%m-%Y@%H%M")
+
+        except ValueError:
+            text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
+        else:
+            event_instance.set_event_date(event_date)
+            event_instance.set_id(event_date=event_date)
+
+    elif prev_form == "time":
+        try:
+            event_time = datetime.strptime(update.message.text, "%H%M")
+        except ValueError:
+            text = "<b>Format seems to be wrong. Please try again.</b>\n\n "
+        else:
+            event_time = event_instance.replace_end_time(event_time)
+            event_instance.set_event_end(event_time)
+
+    elif prev_form == 'location':
+        event_instance.set_location(update.message.text)
 
     context.user_data['event_instance'] = event_instance
 
@@ -634,6 +636,7 @@ access : {event_instance.access_control}
 
 
 def change_datetime(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = False
     context.user_data['form'] = 'datetime'
     event_instance = context.user_data['event_instance']
     pretty_date = event_instance.event_date.strftime("%d-%m-%Y@%H%M")
@@ -656,6 +659,7 @@ It is <u><b>not recommended</b></u> to change the starting date and time of an e
 
 
 def change_time(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = False
     context.user_data['form'] = 'time'
     query = update.callback_query
     event_instance = context.user_data['event_instance']
@@ -679,16 +683,18 @@ def formatting_error(update: Update, context: CallbackContext) -> int:
 
 
 def edit_type(update: Update, context: CallbackContext) -> str:
-    context.user_data['form'] = 'query'
+    context.user_data['is_query'] = True
+    context.user_data['form'] = 'event_type'
     query = update.callback_query
     query.answer()
 
     buttons = [
-           [InlineKeyboardButton(text='Field Training', callback_data='event_type,Field Training')],
-           [InlineKeyboardButton(text='Scrim', callback_data='event_type,Scrim')],
-           [InlineKeyboardButton(text='Hardcourt/Track', callback_data='event_type,Hardcourt/Track')],
-           [InlineKeyboardButton(text='Gym/Pod', callback_data='event_type,Gym/Pod')],
-           [InlineKeyboardButton(text='Cohesion', callback_data='event_type,Cohesion')],
+           [InlineKeyboardButton(text='Field Training', callback_data='Field Training')],
+           [InlineKeyboardButton(text='Scrim', callback_data='Scrim')],
+           [InlineKeyboardButton(text='Hardcourt/Track', callback_data='Hardcourt/Track')],
+           [InlineKeyboardButton(text='Gym/Pod', callback_data='Gym/Pod')],
+           [InlineKeyboardButton(text='Cohesion', callback_data='Cohesion')],
+           [InlineKeyboardButton(text='Custom', callback_data='Custom')]
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(
@@ -698,10 +704,21 @@ Select the type of event: (You may use Scrim to indicate tournament availability
             """,
             reply_markup=reply_markup
             )
+    return 3.1
+
+
+def handle_edit_type(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = False
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+            "Write custom tag"
+            )
     return "event_menu"
 
 
 def edit_location(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = False
     context.user_data['form'] = 'location'
     query = update.callback_query
     query.answer()
@@ -716,13 +733,14 @@ Generic location titles or google map links are accepted
 
 
 def edit_access(update: Update, context: CallbackContext) -> str:
-    context.user_data['form'] = 'query'
+    context.user_data['is_query'] = True
+    context.user_data['form'] = 'access'
     query = update.callback_query
     query.answer()
     buttons = [
-           [InlineKeyboardButton(text='Guest (2)', callback_data='access_control,2')],
-           [InlineKeyboardButton(text='Club Members (4)', callback_data='access_control,4')],
-           [InlineKeyboardButton(text='Core (5)', callback_data='access_control,5')],
+           [InlineKeyboardButton(text='Guest (2)', callback_data='2')],
+           [InlineKeyboardButton(text='Club Members (4)', callback_data='4')],
+           [InlineKeyboardButton(text='Core (5)', callback_data='5')],
             ]
     reply_markup = InlineKeyboardMarkup(buttons)
     query.edit_message_text(
@@ -1166,6 +1184,13 @@ def main():
                     CallbackQueryHandler(edit_location, pattern='^location$'),
                     CallbackQueryHandler(edit_access, pattern='^access$'),
                     CallbackQueryHandler(commit_event_changes, pattern='^forward$'),
+                    ],
+                3.1: [
+                    CallbackQueryHandler(handle_edit_type, pattern='^Custom$'),
+                    CallbackQueryHandler(
+                        event_menu,
+                        pattern="^(Field Training|Scrim|Hardcourt/Track|Gym/Pod|Cohesion)$"
+                                         ),
                     ],
                 'event_menu': [
                     CallbackQueryHandler(event_menu),
