@@ -19,6 +19,23 @@ def escape_html_tags(text: str) -> str:
     return text
 
 
+def generate_reason_button(button_state: bool) -> InlineKeyboardButton:
+    """
+    creates an InlineKeyboardButton based on button state
+    callback_data :
+        true -> 'on'
+        false -> 'off'
+    """
+    button_text = "Remove Reason/Comment"
+    callback_data = "off"
+
+    if button_state:
+        button_text = "Attach Reason/Comment"
+        callback_data = "on"
+
+    return InlineKeyboardButton(text=button_text, callback_data=callback_data)
+
+
 def date_buttons(data: sqlite3.Row, page_num=0, pages=True) -> list:
     buttons = list()
 

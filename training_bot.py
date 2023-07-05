@@ -109,6 +109,7 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     context.user_data["event_data"] = event_data
     context.user_data["page"] = 0
     context.user_data["user_instance"] = user_instance
+    context.user_data['date_chosen'] = False
 
     reply_markup = InlineKeyboardMarkup(utils.date_buttons(event_data, 0))
     # if there are no queried trainings
@@ -197,25 +198,49 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
 
-    # retrieve date query and store
-    selected_event = int(query.data)
-    event_instance = TrainingEventManager(selected_event)
-    user_instance = context.user_data['user_instance']
+    date_chosen = context.user_data['date_chosen']
 
-    # retrieve data
-    attendance = AttendanceManager(user_instance.id, event_instance.id)
+    if not date_chosen:
+        # retrieve date query and store
+        selected_event = int(query.data)
+        event_instance = TrainingEventManager(selected_event)
+        user_instance = context.user_data['user_instance']
+
+        # retrieve data
+        attendance = AttendanceManager(user_instance.id, event_instance.id)
+        attach_reason = False
+
+        # store attendance into context
+        context.user_data["event_instance"] = event_instance
+        context.user_data['attendance'] = attendance
+        context.user_data['prev_status'] = attendance.get_status()
+        context.user_data["is_query"] = True
+
+        # date has been choosen so toggle value
+        context.user_data['date_chosen'] = True
+
+    else:
+        reasons_callback = query.data
+
+        attach_reason = False
+        if reasons_callback == "on":
+            attach_reason = True
+
+        event_instance = context.user_data['event_instance']
+        attendance = context.user_data['attendance']
+
+        # store
+        context.user_data['attach_reason'] = attach_reason
+
     event_date = event_instance.get_event_date()
-
-    # store attendance into context
-    context.user_data["event_instance"] = event_instance
-    context.user_data['attendance'] = attendance
-    context.user_data['prev_status'] = attendance.get_status()
-    context.user_data["gave_reason"] = False
+    # always want to create a button state opposite of what attach_reason is
+    reason_button = utils.generate_reason_button(button_state=not attach_reason)
+    attach_reason = int(attach_reason)
 
     button = [
-            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data="2")],
-            [InlineKeyboardButton("Yes but...", callback_data="1")],
-            [InlineKeyboardButton("No (lame)", callback_data="0")],
+            [reason_button],
+            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data=f"1,{attach_reason}")],
+            [InlineKeyboardButton("No (lame)", callback_data=f"0,{attach_reason}")],
             ]
     reply_markup = InlineKeyboardMarkup(button)
 
@@ -229,6 +254,8 @@ Event: {event_instance.event_type}
 Time: {event_instance.pretty_start()} - {event_instance.pretty_end()}
 Location : {event_instance.location}
 
+using reason: {attach_reason}
+
 Would you like to go for {event_instance.event_type}?
             """,
             reply_markup=reply_markup,
@@ -240,13 +267,14 @@ Would you like to go for {event_instance.event_type}?
 def give_reason(update: Update, context: CallbackContext) -> str:
     query = update.callback_query
     query.answer()
-    status = int(query.data)
+    status = query.data[0]
+    status = int(status)
 
     attendance = context.user_data["attendance"]
     attendance.set_status(status)
 
     context.user_data['attendance'] = attendance
-    context.user_data["gave_reason"] = True
+    context.user_data["is_query"] = False
 
     query.edit_message_text(
             text="Please write a comment/reason 😏"
@@ -258,17 +286,18 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
 
     # retrieve indication of attendance
     attendance = context.user_data['attendance']
-    gave_reason = context.user_data['gave_reason']
+    is_query = context.user_data['is_query']
     user_instance = context.user_data['user_instance']
     event_instance = context.user_data['event_instance']
     prev_status = context.user_data['prev_status']
 
     text = "updating your attendance..."
-    if not gave_reason:
+    if is_query:
         # indicated attendance is yes skipped give_reason
         query = update.callback_query
         query.answer()
-        attendance.set_status(1)
+        status = int(query.data[0])
+        attendance.set_status(status)
         attendance.set_reason("")
         bot_message = query.edit_message_text(
                 text=text
@@ -984,9 +1013,9 @@ def main():
                     CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
                     ],
                 2: [
-                    CallbackQueryHandler(give_reason, pattern="^0$"),
-                    CallbackQueryHandler(give_reason, pattern="^1$"),
-                    CallbackQueryHandler(update_attendance, pattern="^2$"),
+                    CallbackQueryHandler(indicate_attendance, pattern="^(on|off)$"),
+                    CallbackQueryHandler(give_reason, pattern="^\d,1$"),
+                    CallbackQueryHandler(update_attendance, pattern="^\d,0$"),
                     MessageHandler(Filters.text & ~Filters.command, update_attendance)
                     ],
                 },
