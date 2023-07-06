@@ -3,7 +3,9 @@ import logging
 import sqlite3
 
 
-def upgrade_script(prev_ver, cur_ver):
+def upgrade_script(prev_ver, cur_ver, testing):
+    if testing:
+        return
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
     )
