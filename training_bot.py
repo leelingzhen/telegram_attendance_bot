@@ -235,12 +235,16 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     event_date = event_instance.get_event_date()
     # always want to create a button state opposite of what attach_reason is
     reason_button = utils.generate_reason_button(button_state=not attach_reason)
+
+    accountable_reason = event_instance.accountable or attach_reason
     attach_reason = int(attach_reason)
+    accountable_reason = int(accountable_reason)
+
 
     button = [
             [reason_button],
             [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data=f"1,{attach_reason}")],
-            [InlineKeyboardButton("No (lame)", callback_data=f"0,{attach_reason}")],
+            [InlineKeyboardButton("No (lame)", callback_data=f"0,{accountable_reason}")],
             ]
     reply_markup = InlineKeyboardMarkup(button)
 
@@ -253,9 +257,11 @@ Date: {event_date.strftime('%-d %b, %a')}
 Event: {event_instance.event_type}
 Time: {event_instance.pretty_start()} - {event_instance.pretty_end()}
 Location : {event_instance.location}
+Accountable event: {'Yes' if event_instance.accountable else 'No'}
 
-using reason: {attach_reason}
-
+<u>Description</u>
+{event_instance.description}
+{chr(10) + '<i>You will write your reason/comment in the next step</i>' + chr(10) if attach_reason else ''}
 Would you like to go for {event_instance.event_type}?
             """,
             reply_markup=reply_markup,
@@ -326,6 +332,10 @@ Event: {event_instance.event_type}
 Time: {event_instance.pretty_start()} - {event_instance.pretty_end()}
 Location : {event_instance.location}
 Attendance: {'Yes' if attendance.status else 'No'}
+
+<u>Description</u>
+{event_instance.description}
+
 """
     if attendance.reason:
         text += f"Comments: {attendance.reason}\n\n"
