@@ -491,6 +491,8 @@ def first_event_menu(update: Update, context: CallbackContext) -> int:
                 [InlineKeyboardButton(text="Event datetime", callback_data='start')],
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
+                [InlineKeyboardButton(text='Description', callback_data='description')],
+                [InlineKeyboardButton(text='Accountablility', callback_data='accountable')],
                 [InlineKeyboardButton(text='Location', callback_data='location')],
                 [InlineKeyboardButton(text='Access', callback_data='access')],
                 ]
@@ -547,6 +549,9 @@ end : {event_instance.pretty_end()}
 type of event : {event_instance.event_type}
 location : {event_instance.location}
 access : {event_instance.access_control}
+accountable event : {'Yes' if event_instance.accountable else 'No'}
+description:
+{event_instance.description}
                     """,
             reply_markup=reply_markup
             )
@@ -566,6 +571,8 @@ def event_menu(update: Update, context: CallbackContext) -> int:
                 [InlineKeyboardButton(text="Ending time", callback_data='end_time')],
                 [InlineKeyboardButton(text="Event type", callback_data='type')],
                 [InlineKeyboardButton(text='Location', callback_data='location')],
+                [InlineKeyboardButton(text='Description', callback_data='description')],
+                [InlineKeyboardButton(text='Accountablility', callback_data='accountable')],
                 [InlineKeyboardButton(text='Access', callback_data='access')],
                 [
                     #InlineKeyboardButton(text="Announce", callback_data='announce'), 
@@ -590,6 +597,12 @@ def event_menu(update: Update, context: CallbackContext) -> int:
 
     elif prev_form == 'access':
         event_instance.set_access(int(data))
+
+    elif prev_form == 'accountable':
+        event_instance.set_accountable(int(data))
+
+    elif prev_form == 'description':
+        event_instance.set_description(data)
 
     elif prev_form == "datetime":
         try:
@@ -622,6 +635,9 @@ end : {event_instance.pretty_end()}
 type of event : {event_instance.event_type}
 location : {event_instance.location}
 access : {event_instance.access_control}
+accountable event : {'Yes' if event_instance.accountable else 'No'}
+description:
+{event_instance.description}
                     """
     reply_markup = InlineKeyboardMarkup(buttons)
     bot_message.edit_text(
@@ -752,6 +768,47 @@ for eg. Club members can participate in events with 'Guest' level access""",
             reply_markup=reply_markup
             )
 
+    return "event_menu"
+
+def edit_description(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = False
+    context.user_data['form'] = 'description'
+    event_instance = context.user_data['event_instance']
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(
+            text=f"""
+Write a description for the event
+current description:
+<code>{event_instance.description}</code>
+            """,
+            parse_mode='html'
+            )
+    return "event_menu"
+
+
+def edit_accountable(update: Update, context: CallbackContext) -> str:
+    context.user_data['is_query'] = True
+    context.user_data['form'] = 'accountable'
+    event_instance = context.user_data['event_instance']
+    query = update.callback_query
+    query.answer()
+    buttons = [
+            [InlineKeyboardButton(text='Yes', callback_data='1')],
+            [InlineKeyboardButton(text="No", callback_data='0')]
+            ]
+
+    query.edit_message_text(
+            text=f"""
+Accountability for an event.
+'Yes' -> users will be prompted for a reason if indicating 'No' for this event
+'No' ->  users will not be prompted for reason if indicating 'No'
+
+current selection : {'Yes' if event_instance.accountable else 'No'}
+            """,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode='html'
+            )
     return "event_menu"
 
 
@@ -1183,6 +1240,8 @@ def main():
                     CallbackQueryHandler(edit_type, pattern='^type$'),
                     CallbackQueryHandler(edit_location, pattern='^location$'),
                     CallbackQueryHandler(edit_access, pattern='^access$'),
+                    CallbackQueryHandler(edit_description, pattern='^description$'),
+                    CallbackQueryHandler(edit_accountable, pattern='^accountable$'),
                     CallbackQueryHandler(commit_event_changes, pattern='^forward$'),
                     ],
                 3.1: [

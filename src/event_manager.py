@@ -247,6 +247,8 @@ class EventManager:
         self.location = data["location"]
         self.announcement_entities = None  # list of telegram.Message
         self.access_control = data["access_control"]  # type int
+        self.description = data['description']
+        self.accountable = data['accountable']
 
         self.record_exist = True
         self.correct_event_date()
