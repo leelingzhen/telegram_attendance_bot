@@ -124,7 +124,7 @@ class EventManager:
         self.event_type = None  # type str
         self.location = None  # type str
         self.description = None
-        self.accountable = None
+        self.accountable = 1
         self.announcement = None  # str
         self.announcement_entities = None  # list of telegram.Message
         self.access_control = None  # type int
