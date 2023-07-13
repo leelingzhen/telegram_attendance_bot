@@ -3,7 +3,7 @@ import src.Upgrade.upgrade
 
 
 class UpgradeManager:
-    def __init__(self, config: dict, cur_ver):
+    def __init__(self, config: dict, cur_ver, testing=False):
         self.config = config
         self.cur_ver = cur_ver
 
@@ -26,7 +26,7 @@ class UpgradeManager:
             return False
 
         src.Upgrade.upgrade.upgrade_script(
-            self.config['version'], self.cur_ver)
+            self.config['version'], self.cur_ver, testing=testing)
         self.finish_version_upgrade(testing=testing)
         return True
 

@@ -263,6 +263,8 @@ class EventsTableSqlite(Sqlite):
             start_time: str,  # "%H:%M"
             end_time: str,  # "%H:%M"
             location: str,
+            description: str,
+            accountable: int,
             access_control: int,
             announcement: str = None
     ):
@@ -277,6 +279,8 @@ class EventsTableSqlite(Sqlite):
             start_time (str): The start time of the event in the format "%H:%M".
             end_time (str): The end time of the event in the format "%H:%M".
             location (str): The location of the event.
+            description: (str): a small description of the event
+            accountable: int: accountability for an event 1 or 0
             access_control (int): The access control level of the event.
             announcement (str, optional): Additional announcement for the event. Defaults to None.
 
@@ -309,9 +313,10 @@ class EventsTableSqlite(Sqlite):
 
         self.cur.execute("BEGIN TRANSACTION")
         self.cur.execute(
-            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (id, event_type, event_date, start_time,
-             end_time, location, announcement, access_control)
+             end_time, location, announcement, access_control, description,
+             accountable)
         )
         self.con.commit()
 
@@ -335,6 +340,8 @@ class EventsTableSqlite(Sqlite):
             start_time: str,  # "%H:%M"
             end_time: str,  # "%H:%M"
             location: str,
+            description: str,
+            accountable: int,
             access_control: int,
             announcement: str = None
     ):
@@ -350,6 +357,8 @@ class EventsTableSqlite(Sqlite):
             start_time (str): The start time of the event in the format "%H:%M".
             end_time (str): The end time of the event in the format "%H:%M".
             location (str): The location of the event.
+            description: (str): a small description of the event
+            accountable: int: accountability for an event 1 or 0
             access_control (int): The access control level of the event.
             announcement (str, optional): Additional announcement for the event. Defaults to None.
 
@@ -391,11 +400,14 @@ class EventsTableSqlite(Sqlite):
                 end_time = ?,
                 location = ?,
                 announcement = ?,
-                access_control = ?
+                access_control = ?,
+                description = ?,
+                accountable = ?
             WHERE
                 id = ?""",
             (new_id, event_type, event_date, start_time, end_time,
-             location, announcement, access_control, original_id)
+             location, announcement, access_control, description, accountable,
+             original_id)
         )
         self.con.commit()
 

@@ -123,6 +123,8 @@ class EventManager:
         self.end_time = None  # event end timing, type datetime
         self.event_type = None  # type str
         self.location = None  # type str
+        self.description = None
+        self.accountable = None
         self.announcement = None  # str
         self.announcement_entities = None  # list of telegram.Message
         self.access_control = None  # type int
@@ -187,6 +189,12 @@ class EventManager:
     def set_location(self, location: str):
         self.location = location
 
+    def set_description(self, description: str):
+        self.description = description
+
+    def set_accountable(self, accountable: int):
+        self.accountable = accountable
+
     def set_announcement(self, announcement: str):
         self.announcement = announcement
 
@@ -239,6 +247,8 @@ class EventManager:
         self.location = data["location"]
         self.announcement_entities = None  # list of telegram.Message
         self.access_control = data["access_control"]  # type int
+        self.description = data['description']
+        self.accountable = data['accountable']
 
         self.record_exist = True
         self.correct_event_date()
@@ -448,6 +458,8 @@ class AdminEventManager(TrainingEventManager, EventManager):
             start_time=self.start_time.strftime("%H:%M"),
             end_time=self.end_time.strftime("%H:%M"),
             location=self.location,
+            description=self.description,
+            accountable=self.accountable,
             announcement=self.announcement,
             access_control=self.access_control,
         )
@@ -495,6 +507,8 @@ class AdminEventManager(TrainingEventManager, EventManager):
             start_time=self.start_time.strftime("%H:%M"),
             end_time=self.end_time.strftime("%H:%M"),
             location=self.location,
+            description=self.description,
+            accountable=self.accountable,
             announcement=self.announcement,
             access_control=self.access_control,
         )

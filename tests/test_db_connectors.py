@@ -134,6 +134,8 @@ class TestEventsTableSqlite(unittest.TestCase):
             start_time="13:00",  # "%H:%M"
             end_time="14:00",  # "%H:%M"
             location="test location",
+            description="",
+            accountable=1,
             access_control=2,
             announcement=None
         )
@@ -156,6 +158,8 @@ class TestEventsTableSqlite(unittest.TestCase):
             start_time="13:00",  # "%H:%M"
             end_time="14:00",  # "%H:%M"
             location="test location",
+            description="",
+            accountable=1,
             access_control=2,
             announcement=None
         )
@@ -168,6 +172,8 @@ class TestEventsTableSqlite(unittest.TestCase):
             start_time="13:00",  # "%H:%M"
             end_time="16:00",  # "%H:%M"
             location="Test Location",
+            description="",
+            accountable=1,
             access_control=2,
             announcement='Test announcement'
         )
