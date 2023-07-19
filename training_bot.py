@@ -987,7 +987,7 @@ def main():
 
     # upgrade if there is
     version = src.Upgrade.upgrade_manager.UpgradeManager(
-            config=CONFIG, cur_ver=2.11
+            config=CONFIG, cur_ver=2.12
             )
     updated = version.update_system()
     if updated:
