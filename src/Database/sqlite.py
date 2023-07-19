@@ -881,3 +881,88 @@ class SqliteUserManager(
         user_data = self.cur.execute(query, (access, )).fetchall()
 
         return user_data
+
+    class EventPollOptions(Sqlite):
+        """
+        class to access event_poll_options table
+        """
+
+        def __init__(self):
+            super().__init__()
+
+        def insert_poll_option(self, event_id: int, poll_id: int, description: str):
+            self.cur.execute('BEGIN TRANSACTION')
+            self.cur.execute(
+                'INSERT INTO event_poll_options (?, ?, ?)',
+                (event_id, poll_id, description)
+            )
+            self.con.commit()
+
+        def get_poll_options(self, event_id: int, poll_id=None):
+            """
+            retreive poll options based on event_id and optionally poll_id
+            Args:
+                event_id (int): the event id of the poll
+                poll_id (int): the id number refering to the poll option
+
+            Returns:
+                data: poll options containing the events data retrieved from the database
+
+            """
+            query = "SELECT * FROM event_poll_options WHERE {conditions}"
+            values = [event_id]
+            columns = ['event_id = ?']
+
+            if poll_id is not None:
+                values.append(poll_id)
+                columns.append('poll_id = ?')
+
+            columns = " AND ".join(columns)
+            data = self.cur.execute(query.format(
+                conditions=columns), tuple(values))
+
+            return data
+
+        def update_poll_description(self, event_id: int, poll_id: int, new_description):
+            """
+            updating the poll description
+            """
+            self.cur.execute('BEGIN TRANSACTION')
+            self.cur.execute('UPDATE event_poll_options SET poll_description = ? WHERE event_id = ? AND poll_id = ?',
+                             (new_description, event_id, poll_id))
+            self.con.commit()
+
+        def update_poll_event_id(self, event_id, new_event_id):
+            """
+            updating the event_id of the poll
+            """
+
+            self.cur.execute('BEGIN TRANSACTION')
+            self.cur.execute(
+                'UPDATE event_poll_options SET event_id = ? WHERE event_id = ?', (new_event_id, event_id))
+            self.con.commit()
+
+        def delete_poll(self, event_id, poll_id=None):
+            """
+            delete poll/poll options, poll is deleted if poll_id is None
+            Args:
+                event_id (int): the event id of the poll
+                poll_id (int): the id number refering to the poll option
+
+            Returns:
+                data: poll options containing the events data retrieved from the database
+
+            """
+            query = 'DELETE FROM event_poll_options WHERE {conditions}'
+            values = [event_id]
+            columns = ['event_id = ?']
+
+            if poll_id is not None:
+                values.append(poll_id)
+                columns.append('poll_id = ?')
+
+            columns = " AND ".join(columns)
+            self.cur.execute('BEGIN TRANSACTION')
+            self.cur.execute(query.format(
+                conditions=columns), tuple(values))
+            self.con.commit()
