@@ -2,7 +2,7 @@
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapped
 
-from src.Database.Service.base import Base
+from src.Database.DatabaseSession.base import Base
 
 
 class User:
@@ -24,7 +24,7 @@ class User:
 
 
 class User(User, Base):
-    __tablename__ = "players"
+    __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
