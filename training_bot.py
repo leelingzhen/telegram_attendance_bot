@@ -7,7 +7,7 @@ from typing import Union
 import src.utils as utils
 import src.Upgrade.upgrade_manager
 
-from datetime import datetime
+from datetime import datetime, date
 from functools import wraps
 
 from src.Models.User import User
@@ -36,8 +36,10 @@ from telegram.ext import (
 
 ### new imports
 from src.Controller.UserProvider import UserProvider
-from src.Enum.Enum import AccessCategory
+from src.Enum.Enum import AccessCategory, Direction
 from src.Controller.UserValidation import UserValidation
+from src.Controller.EventProvider import EventProvider
+from src.Buttons import EventOptionButton, ScrollButton
 
 with open("config.json") as f:
     CONFIG = json.load(f)
@@ -82,7 +84,8 @@ def secure(access=2):
 
     return decorator
 
-def check_and_cache_new_user(func):
+
+def check_and_cache_user(func):
     """Sends typing action while processing func command."""
 
     @wraps(func)
@@ -101,7 +104,7 @@ def check_and_cache_new_user(func):
 
 # ENTRY POINTS
 @send_typing_action
-@check_and_cache_new_user
+@check_and_cache_user
 def start(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     user_provider = UserProvider()
@@ -120,42 +123,111 @@ def start(update: Update, context: CallbackContext) -> None:
 
 
 @send_typing_action
-@check_and_cache_new_user
+@check_and_cache_user
 def validate_at_least_guest(update: Update, context: CallbackContext) -> int:
     user_id = update.effective_user.id
 
     user_provider = UserProvider()
+    user = user_provider.user(user_id)
     access = user_provider.user_access(user_id)
 
     if not access.is_at_least_guest:
         update.message.reply_text("You do not have access to this command yet.")
         return ConversationHandler.END
 
-    conversation_state = date_choosing_handler(update, context)
+    conversation_state = date_choosing_handler(update, context, user, access)
 
     return conversation_state
 
 
 @send_typing_action
-@check_and_cache_new_user
+@check_and_cache_user
 def validate_member(update: Update, context: CallbackContext) -> int:
     user_id = update.effective_user.id
 
     user_provider = UserProvider()
+    user = user_provider.user(user_id)
     access = user_provider.user_access(user_id)
 
     if not access.is_at_least_member:
         update.message.reply_text("You do not have access to this command yet.")
         return ConversationHandler.END
 
-    conversation_state = date_choosing_handler(update, context)
+    conversation_state = date_choosing_handler(update, context, user, access)
 
     return conversation_state
 
+def page_change_v2(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    scroll_direction = int(query.data)
 
-def date_choosing_handler(update: Update, context: CallbackContext) -> int:
+    context.user_data["page"] += scroll_direction
 
-    return ConversationHandler.END
+    page = context.user_data["page"]
+    events = context.user_data["events"]
+
+    page_slice = slice(page * 5, page * 5 + 5)
+    is_last_page = page_slice.stop >= len(events)
+
+    buttons = list()
+    for event in events[page_slice]:
+        buttons.append([EventOptionButton(event)])
+
+    scroll_buttons = list()
+    if page != 0:
+        scroll_buttons.append(ScrollButton(Direction.prev))
+    if not is_last_page:
+        scroll_buttons.append(ScrollButton(Direction.next))
+
+    buttons.append(scroll_buttons)
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    query.edit_message_reply_markup(
+        reply_markup=reply_markup
+    )
+
+    return 1
+
+
+
+def date_choosing_handler(
+        update: Update,
+        context: CallbackContext,
+        user: User,
+        access: AccessCategory
+) -> int:
+    event_provider = EventProvider()
+
+    events = event_provider.events(from_date=date.today(), access=access)
+    page = 0
+
+    context.user_data["events"] = events
+    context.user_data["user"] = user
+    context.user_data["access"] = access
+    context.user_data["page"] = page
+
+    if not events:
+        update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
+        return ConversationHandler.END
+
+    buttons = list()
+
+    for event in events[:5]:
+        buttons.append([EventOptionButton(event)])
+
+    if len(events) > 5:
+        buttons.append([ScrollButton(Direction.next)])
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    update.message.reply_text(
+        text="Choose Date: ",
+        reply_markup=reply_markup
+    )
+    return 1
+
 
 
 @secure(access=2)
@@ -1080,7 +1152,7 @@ def main():
     single_attendance_handler = ConversationHandler(
         entry_points=[CommandHandler("new_attendance", validate_member)],
         states={
-            1: [CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),]
+            1: [CallbackQueryHandler(page_change_v2, pattern='^-?[0-9]{0,10}$'), ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

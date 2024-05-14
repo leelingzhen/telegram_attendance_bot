@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class Gender(Enum):
@@ -32,6 +32,11 @@ class AccessCategory(Enum):
         for category in AccessCategory:
             if category.value == value:
                 return category
+
+
+class Direction(Enum):
+    next = auto()
+    prev = auto()
 
 
 

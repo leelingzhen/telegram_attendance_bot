@@ -1,7 +1,7 @@
 import unittest
 from src.Models.Event import Event
 from src.Database.DatabaseSession.DatabaseSessionProviding import Sqlite3SessionProvider
-from src.Database.Services.EventService import EventDatabaseService
+from src.Database.Services.EventService import EventService
 
 from datetime import date
 from datetime import time
@@ -9,7 +9,7 @@ from datetime import time
 
 class MyTestCase(unittest.TestCase):
     session_provider = Sqlite3SessionProvider(isTest=True)
-    service = EventDatabaseService(session_provider)
+    service = EventService(session_provider)
 
     def testCRUD(self):
         event = Event(

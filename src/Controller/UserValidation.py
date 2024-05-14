@@ -8,7 +8,7 @@ from src.Enum.Enum import AccessCategory
 class UserValidating(ABC):
 
     @abstractmethod
-    def user_exists(self, user_id) -> bool:
+    def user_exists(self, user_id: int) -> bool:
         pass
 
     @abstractmethod
@@ -39,7 +39,7 @@ class UserValidation(UserValidating):
         self.user_service = user_service
         self.access_service = access_service
 
-    def user_exists(self, user_id) -> bool:
+    def user_exists(self, user_id: int) -> bool:
         return self.user_service.is_exists(user_id)
 
     def cache_user(self, user: User, access: AccessCategory = AccessCategory.public):

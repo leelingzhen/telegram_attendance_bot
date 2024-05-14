@@ -4,9 +4,18 @@ from sqlalchemy.sql import exists
 from src.Database.DatabaseSession.DatabaseSessionProviding import DatabaseSessionProviding
 from src.Database.DatabaseSession.DatabaseSessionProviding import Sqlite3SessionProvider
 from src.Models.Event import Event
+from src.Enum.Enum import AccessCategory
+from abc import ABC, abstractmethod
 
 
-class EventDatabaseService:
+class EventServicing(ABC):
+
+    @abstractmethod
+    def get_after(self, event_id: int, access: AccessCategory) -> list[Event]:
+        pass
+
+
+class EventService:
     database_session_provider: DatabaseSessionProviding
 
     def __init__(
@@ -29,12 +38,12 @@ class EventDatabaseService:
 
         return event
 
-    def get_after(self, event_id: int, access: int = 2) -> list[Event]:
+    def get_after(self, event_id: int, access: AccessCategory) -> list[Event]:
         with self.database_session_provider.make_session() as session:
             statement = (
                 select(Event)
                 .filter(Event.id >= event_id)
-                .filter(Event.access_control >= access)
+                .filter(Event.access_control >= access.value)
             )
             events = session.scalars(statement).all()
         return list(events)
