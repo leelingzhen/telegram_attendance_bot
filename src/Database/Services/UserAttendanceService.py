@@ -6,19 +6,19 @@ from src.Database.DatabaseSession.DatabaseSessionProviding import (DatabaseSessi
 from src.Models.Attendance import Attendance
 
 
-class UserAttendanceDatabaseService:
+class UserAttendanceService:
     database_session_provider: DatabaseSessionProviding
 
     def __init__(self, database_session_provider: DatabaseSessionProviding = Sqlite3SessionProvider()):
         self.database_session_provider = database_session_provider
 
-    def create(self, attendance: Attendance):
+    def insert(self, attendance: Attendance):
         session = self.database_session_provider.make_session()
         session.add(attendance)
         session.commit()
         session.close()
 
-    def read(self, event_id: int = None, user_id: int = None, status: int = None) -> list[Attendance]:
+    def get_attendance(self, event_id: int = None, user_id: int = None, status: int = None) -> list[Attendance]:
         session = self.database_session_provider.make_session()
 
         statement = select(Attendance)

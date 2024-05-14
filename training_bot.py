@@ -2,33 +2,42 @@ import logging
 import os
 import json
 import sqlite3
+from typing import Union
+
 import src.utils as utils
 import src.Upgrade.upgrade_manager
 
 from datetime import datetime
 from functools import wraps
+
+from src.Models.User import User
 from src.user_manager import UserManager
 from src.event_manager import TrainingEventManager, AttendanceManager
 from src.message_manager import KaypohMessage, KaypohMessageHandler
 
 from telegram import (
-        Update,
-        ForceReply,
-        InlineKeyboardButton,
-        InlineKeyboardMarkup,
-        ChatAction,
-        MessageEntity,
-        )
+    Update,
+    ForceReply,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ChatAction,
+    MessageEntity,
+)
 from telegram.bot import Bot, BotCommand
 from telegram.ext import (
-        Updater,
-        CommandHandler,
-        MessageHandler,
-        Filters,
-        CallbackContext,
-        ConversationHandler,
-        CallbackQueryHandler,
-        )
+    Updater,
+    CommandHandler,
+    MessageHandler,
+    Filters,
+    CallbackContext,
+    ConversationHandler,
+    CallbackQueryHandler,
+)
+
+### new imports
+from src.Controller.UserProvider import UserProvider
+from src.Enum.Enum import AccessCategory
+from src.Controller.UserValidation import UserValidation
 
 with open("config.json") as f:
     CONFIG = json.load(f)
@@ -48,7 +57,7 @@ def send_typing_action(func):
     @wraps(func)
     def command_func(update, context, *args, **kwargs):
         context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
-        return func(update, context,  *args, **kwargs)
+        return func(update, context, *args, **kwargs)
 
     return command_func
 
@@ -64,35 +73,89 @@ def secure(access=2):
             if user_instance.access < access:
                 print("WARNING: Unauthorized access denied for @{}.".format(user.username))
                 update.message.reply_text(
-                        text='you do not have access to this function, please contact adminstrators'
-                        )
+                    text='you do not have access to this function, please contact adminstrators'
+                )
                 return  # quit function
             return func(update, context, *args, **kwargs)
+
         return wrapped
+
     return decorator
 
+def check_and_cache_new_user(func):
+    """Sends typing action while processing func command."""
 
+    @wraps(func)
+    def wrapped(update, context, *args, **kwargs):
+        telegram_user_object = update.effective_user
+        validation = UserValidation()
+        if not validation.user_exists(user_id=telegram_user_object.id):
+            user = validation.make_new_user(
+                id=telegram_user_object.id,
+                telegram_user=telegram_user_object.username)
+            validation.cache_user(user, AccessCategory.public)
+        return func(update, context, *args, **kwargs)
+
+    return wrapped
+
+
+# ENTRY POINTS
 @send_typing_action
-def start(update: Update, context: CallbackContext)-> None:
-    user = update.effective_user
-    user_instance = UserManager(user)
+@check_and_cache_new_user
+def start(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    user_provider = UserProvider()
 
-    player_profile = user_instance.retrieve_user_data()
+    user = user_provider.user(user_id)
 
-    if player_profile is None:
-        return None
-
-    player_access = user_instance.get_user_access()
-    if player_access == 0:
+    user_access = user_provider.user_access(user_id)
+    if user_access == AccessCategory.public:
         update.message.reply_text("Hello new player! please register yourself by using /register")
         return None
 
-    elif player_access > 0:
-        # language_pack = player_profile[3]
-        update.message.reply_text("Hello please use the commands to talk to me!")
-    logger.info('user %s has talked to the bot', user.first_name)
+    update.message.reply_text("Hello please use the commands to talk to me!")
+    logger.info('user %s has talked to the bot', user.name)
 
     return None
+
+
+@send_typing_action
+@check_and_cache_new_user
+def validate_at_least_guest(update: Update, context: CallbackContext) -> int:
+    user_id = update.effective_user.id
+
+    user_provider = UserProvider()
+    access = user_provider.user_access(user_id)
+
+    if not access.is_at_least_guest:
+        update.message.reply_text("You do not have access to this command yet.")
+        return ConversationHandler.END
+
+    conversation_state = date_choosing_handler(update, context)
+
+    return conversation_state
+
+
+@send_typing_action
+@check_and_cache_new_user
+def validate_member(update: Update, context: CallbackContext) -> int:
+    user_id = update.effective_user.id
+
+    user_provider = UserProvider()
+    access = user_provider.user_access(user_id)
+
+    if not access.is_at_least_member:
+        update.message.reply_text("You do not have access to this command yet.")
+        return ConversationHandler.END
+
+    conversation_state = date_choosing_handler(update, context)
+
+    return conversation_state
+
+
+def date_choosing_handler(update: Update, context: CallbackContext) -> int:
+
+    return ConversationHandler.END
 
 
 @secure(access=2)
@@ -118,9 +181,9 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
 
     update.message.reply_text(
-            text="Choose Date:",
-            reply_markup=reply_markup
-            )
+        text="Choose Date:",
+        reply_markup=reply_markup
+    )
     return 1
 
 
@@ -145,9 +208,9 @@ def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
 
     update.message.reply_text(
-            text="Choose Date:",
-            reply_markup=reply_markup
-            )
+        text="Choose Date:",
+        reply_markup=reply_markup
+    )
     return 1
 
 
@@ -158,13 +221,13 @@ def page_change(update: Update, context: CallbackContext) -> int:
 
     context.user_data["page"] += scroll_val
     reply_markup = InlineKeyboardMarkup(
-            utils.date_buttons(
-                context.user_data["event_data"],
-                page_num=context.user_data["page"])
-            )
+        utils.date_buttons(
+            context.user_data["event_data"],
+            page_num=context.user_data["page"])
+    )
     query.edit_message_reply_markup(
-            reply_markup=reply_markup
-            )
+        reply_markup=reply_markup
+    )
     return 1
 
 
@@ -175,8 +238,8 @@ def attendance_list(update: Update, context: CallbackContext) -> int:
     query.answer()
     user = update.effective_user
     query.edit_message_text(
-            text="Kaypohing..."
-            )
+        text="Kaypohing..."
+    )
 
     # retrieve selected event
     event_id = int(query.data)
@@ -185,8 +248,8 @@ def attendance_list(update: Update, context: CallbackContext) -> int:
     message_instance.fill_text_fields(datetime.now())
 
     bot_message = query.edit_message_text(
-            text=message_instance.text, parse_mode='html'
-            )
+        text=message_instance.text, parse_mode='html'
+    )
 
     message_instance.store_message_fields(bot_message)
     message_instance.push_record()
@@ -240,16 +303,15 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
     attach_reason = int(attach_reason)
     accountable_reason = int(accountable_reason)
 
-
     button = [
-            [reason_button],
-            [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data=f"1,{attach_reason}")],
-            [InlineKeyboardButton("No (lame)", callback_data=f"0,{accountable_reason}")],
-            ]
+        [reason_button],
+        [InlineKeyboardButton(f"Yes I ❤️{CONFIG['team_name']} ", callback_data=f"1,{attach_reason}")],
+        [InlineKeyboardButton("No (lame)", callback_data=f"0,{accountable_reason}")],
+    ]
     reply_markup = InlineKeyboardMarkup(button)
 
     query.edit_message_text(
-            text=f"""
+        text=f"""
 Your attendance is indicated as \'{attendance.pretty_attendance()}\'
 
 <u>Details</u>
@@ -264,9 +326,9 @@ Accountable event: {'Yes' if event_instance.accountable else 'No'}
 {chr(10) + '<i>You will write your reason/comment in the next step</i>' + chr(10) if attach_reason else ''}
 Would you like to go for {event_instance.event_type}?
             """,
-            reply_markup=reply_markup,
-            parse_mode='html'
-            )
+        reply_markup=reply_markup,
+        parse_mode='html'
+    )
     return 2
 
 
@@ -283,13 +345,12 @@ def give_reason(update: Update, context: CallbackContext) -> str:
     context.user_data["is_query"] = False
 
     query.edit_message_text(
-            text="Please write a comment/reason 😏"
-            )
+        text="Please write a comment/reason 😏"
+    )
     return 2
 
 
 def update_attendance(update: Update, context: CallbackContext) -> str:
-
     # retrieve indication of attendance
     attendance = context.user_data['attendance']
     is_query = context.user_data['is_query']
@@ -306,16 +367,16 @@ def update_attendance(update: Update, context: CallbackContext) -> str:
         attendance.set_status(status)
         attendance.set_reason("")
         bot_message = query.edit_message_text(
-                text=text
-                )
+            text=text
+        )
     else:
         # retrieve reasons, went through give_reason
         reason = update.message.text
         reason = utils.escape_html_tags(reason)
         attendance.set_reason(reason)
         bot_message = update.message.reply_text(
-                text=text
-                )
+            text=text
+        )
 
     bot_comment = "Hope to see you soon🥲🥲"
     if attendance.is_attending():
@@ -343,20 +404,19 @@ Attendance: {'Yes' if attendance.status else 'No'}
     bot_message.edit_text(text=text + bot_comment, parse_mode='html')
 
     if utils.resend_announcement(prev_status,
-                                   event_instance.announcement,
-                                   user_instance.access):
-
+                                 event_instance.announcement,
+                                 user_instance.access):
         event_instance.generate_entities()
         message_obj = context.bot.send_message(
-                chat_id=user_instance.id,
-                text=event_instance.announcement,
-                entities=event_instance.announcement_entities,
-                )
+            chat_id=user_instance.id,
+            text=event_instance.announcement,
+            entities=event_instance.announcement_entities,
+        )
         context.bot.pin_chat_message(
-                chat_id=user_instance.id,
-                message_id=message_obj.message_id,
-                disable_notification=True
-                )
+            chat_id=user_instance.id,
+            message_id=message_obj.message_id,
+            disable_notification=True
+        )
 
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
@@ -369,9 +429,9 @@ def update_kaypoh_messages(context: CallbackContext):
     success, failed = message_handler.update_all_message_instances()
     n_records = message_handler.n_records()
     logger.info(
-            "completed job queue updating messages for %d records: (%d successful, %d failed)",
-            n_records, success, failed
-            )
+        "completed job queue updating messages for %d records: (%d successful, %d failed)",
+        n_records, success, failed
+    )
 
 
 @secure(access=4)
@@ -397,19 +457,19 @@ def choosing_more_dates(update: Update, context: CallbackContext) -> int:
     buttons = utils.date_buttons(event_data, pages=False)
     buttons.append([
         InlineKeyboardButton(text='Confirm', callback_data='forward'),
-        ])
+    ])
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
     update.message.reply_text(
-            text="""
+        text="""
 Select dates for events you want to update. Select them again to remove them from selection.
 
 Selected Dates:
 
             """,
-            reply_markup=reply_markup
-            )
+        reply_markup=reply_markup
+    )
     return 1
 
 
@@ -443,19 +503,19 @@ def choosing_more_dates_cont(update: Update, context: CallbackContext) -> int:
     buttons = utils.date_buttons(event_data, pages=False)
     buttons.append([
         InlineKeyboardButton(text='Confirm', callback_data='forward'),
-        ])
+    ])
     reply_markup = InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
-            text=f"""
+        text=f"""
 Select dates for events you want to update. Select them again to remove them from selection.
 
 Selected Dates:
 {text}
 
             """,
-            reply_markup=reply_markup
-            )
+        reply_markup=reply_markup
+    )
 
     return 1
 
@@ -465,29 +525,28 @@ def indicate_more(update: Update, context: CallbackContext) -> int:
     query.answer()
     if context.user_data['chosen_events'] == list():
         buttons = [
-                [InlineKeyboardButton(text="Back", callback_data='back')]
-                ]
+            [InlineKeyboardButton(text="Back", callback_data='back')]
+        ]
         query.edit_message_text(
-                text="You have not selected any events, please choose at least one event",
-                reply_markup=InlineKeyboardMarkup(buttons)
-                )
+            text="You have not selected any events, please choose at least one event",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
         return 1
-
 
     # initialise status
     context.user_data["gave_reason"] = False
     context.user_data['status'] = None
 
     buttons = [
-            [InlineKeyboardButton(text="Yes", callback_data="1")],
-            [InlineKeyboardButton(text="No", callback_data="0")]
-            ]
+        [InlineKeyboardButton(text="Yes", callback_data="1")],
+        [InlineKeyboardButton(text="No", callback_data="0")]
+    ]
     reply_markup = InlineKeyboardMarkup(buttons)
 
     query.edit_message_text(
-            text="What would you like to indicate for these events?",
-            reply_markup=reply_markup
-            )
+        text="What would you like to indicate for these events?",
+        reply_markup=reply_markup
+    )
 
     return 2
 
@@ -501,8 +560,8 @@ def give_reason_more(update: Update, context: CallbackContext) -> int:
     context.user_data["gave_reason"] = True
 
     query.edit_message_text(
-            text="Please write a comment/reason 😏. The comment will be applied to all selected events."
-            )
+        text="Please write a comment/reason 😏. The comment will be applied to all selected events."
+    )
     return 2
 
 
@@ -520,16 +579,16 @@ def commit_attendance_plus(update: Update, context: CallbackContext) -> int:
         reason = update.message.text
         reason = utils.escape_html_tags(reason)
         bot_message = update.message.reply_text(
-                text=text
-                )
+            text=text
+        )
     else:
         query = update.callback_query
         query.answer()
         status = 1
         reason = ""
         bot_message = query.edit_message_text(
-                text=text
-                )
+            text=text
+        )
 
     # retrieve selected events
     chosen_events = context.user_data['chosen_events']
@@ -583,9 +642,9 @@ def events(update: Update, context: CallbackContext) -> None:
         text += '\n'
 
     update.message.reply_text(
-            f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿",
-            parse_mode='html'
-            )
+        f"You'll 👀 {CONFIG['team_name']} on:\n\n{text}\nSee you then!🦿🦿",
+        parse_mode='html'
+    )
     logger.info("user %s has sucessfully queried for events.", user.first_name)
 
     return None
@@ -600,12 +659,12 @@ def generate_ics(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     with sqlite3.connect(CONFIG['database']) as db:
         db.row_factory = sqlite3.Row
-        event_data = db.execute("SELECT * FROM events WHERE id = ? ", (event_id, )).fetchone()
+        event_data = db.execute("SELECT * FROM events WHERE id = ? ", (event_id,)).fetchone()
         event_date = datetime.strptime(str(event_id), "%Y%m%d%H%M")
 
         # text formatting
         training_date = event_date.strftime("%-d %b, %a")
-        start_time= event_date.strftime("%-I:%M%p")
+        start_time = event_date.strftime("%-I:%M%p")
         end_time = datetime.strptime(event_data["end_time"], "%H:%M").strftime("%-I:%M%p")
 
         # calendar formatting
@@ -627,9 +686,9 @@ Time: {start_time} - {end_time}
 Location : {event_data['location']}
 """
     query.edit_message_text(
-            text=f"{text}",
-            parse_mode='html'
-            )
+        text=f"{text}",
+        parse_mode='html'
+    )
 
     # with open(f"{event_date.strftime('%-d %b, %a')}.ics", 'w') as f:
     #    f.writelines(calendar.serialize_iter())
@@ -662,20 +721,20 @@ def settings_start(update: Update, context: CallbackContext) -> int:
     context.user_data['user_instance'] = user_instance
 
     buttons = [
-            [InlineKeyboardButton(text="Name", callback_data="name")],
-            [InlineKeyboardButton(text="Notification settings", callback_data="notification")],
-            # [InlineKeyboardButton(text="Language settings", callback_data="language")]
-            ]
+        [InlineKeyboardButton(text="Name", callback_data="name")],
+        [InlineKeyboardButton(text="Notification settings", callback_data="notification")],
+        # [InlineKeyboardButton(text="Language settings", callback_data="language")]
+    ]
     reply_markup = InlineKeyboardMarkup(buttons)
 
     update.message.reply_text(
-            text=f"""
+        text=f"""
 Current settings
 Name: {user_instance.name}
 Notifications: {'Yes' if user_instance.notification == 1 else 'No'}
 """,
-            reply_markup=reply_markup
-            )
+        reply_markup=reply_markup
+    )
     return 1
 
 
@@ -686,16 +745,16 @@ def name_change(update: Update, context: CallbackContext) -> float:
     user_instance = context.user_data['user_instance']
 
     query.edit_message_text(
-            text=(
-                f"""
+        text=(
+            f"""
 Your name is currently set as <u>{user_instance.name}</u>
 <b>Please use your full name</b>
 text me your name if you wish to change it\n\n
 otherwise /cancel to cancel the process
                 """
-                ),
-            parse_mode="html"
-            )
+        ),
+        parse_mode="html"
+    )
     return 1.1
 
 
@@ -705,12 +764,12 @@ def notification_change(update: Update, context: CallbackContext) -> float:
     user_instance = context.user_data['user_instance']
 
     buttons = [
-            [InlineKeyboardButton(text="Yes", callback_data=str(1))],
-            [InlineKeyboardButton(text="No", callback_data=str(0))]
-            ]
+        [InlineKeyboardButton(text="Yes", callback_data=str(1))],
+        [InlineKeyboardButton(text="No", callback_data=str(0))]
+    ]
     query.edit_message_text(
-            text=(
-                f"""
+        text=(
+            f"""
 From using this telegram bot, you will receive club announcements
 reminders. By choosing yes, you are essentially indicating that
 you are an <u>active player</u>
@@ -718,13 +777,13 @@ you are an <u>active player</u>
 <b>Yes</b> - Receive all club announcements and event reminders
 <b>No</b> - Receive only event specific announcements if you indicated 'Yes' for the said event
 
-current selection - {'Yes'if user_instance.notification == 1 else 'No'}
+current selection - {'Yes' if user_instance.notification == 1 else 'No'}
 
 Choose notification setting
                 """),
-            parse_mode='html',
-            reply_markup=InlineKeyboardMarkup(buttons)
-            )
+        parse_mode='html',
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
     return 1.2
 
 
@@ -732,8 +791,8 @@ def language_change(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     query.edit_message_text(
-            text=f"This feature is still under development, please come back another time!"
-            )
+        text=f"This feature is still under development, please come back another time!"
+    )
     logger.info("User %s tried to change language", context.user_data["name"])
     return ConversationHandler.END
 
@@ -748,15 +807,16 @@ def commit_notification_change(update: Update, context: CallbackContext) -> int:
     user_instance.push_update_user()
 
     query.edit_message_text(
-            text=
-            f"""
+        text=
+        f"""
 You have sucessfully turned {'off' if notification == 0 else 'on'} notifications
 
 <i>You are now an {'inactive player' if notification == 0 else 'active player'}</i>
             """,
-            parse_mode='html'
-            )
-    logger.info("User %s has sucessfully changed notification settings and is now an %s player.", user_instance.name, "active" if notification == 1 else "inactive")
+        parse_mode='html'
+    )
+    logger.info("User %s has sucessfully changed notification settings and is now an %s player.", user_instance.name,
+                "active" if notification == 1 else "inactive")
     return ConversationHandler.END
 
 
@@ -765,7 +825,7 @@ def confirmation_name_change(update: Update, context: CallbackContext) -> float:
     buttons = [
         [InlineKeyboardButton(text="Confirm", callback_data="forward")],
         [InlineKeyboardButton(text="Edit Name", callback_data="back")]
-        ]
+    ]
     new_name = update.message.text.rstrip().lstrip()
 
     user_instance = context.user_data['user_instance']
@@ -774,19 +834,19 @@ def confirmation_name_change(update: Update, context: CallbackContext) -> float:
 
     if exisiting_user is not None:
         bot_message = update.message.reply_text(
-                text=f"{new_name} has already been taken by @{exisiting_user}.\n please enter a new name!"
-                )
+            text=f"{new_name} has already been taken by @{exisiting_user}.\n please enter a new name!"
+        )
         return 1.1
 
     user_instance.set_name(new_name)
 
     bot_message = update.message.reply_text(
-            f"Your name will be:\n"
-            f"<u>{user_instance.name}</u>\n\n"
-            "confirm?",
-            parse_mode="html",
-            reply_markup=InlineKeyboardMarkup(buttons)
-            )
+        f"Your name will be:\n"
+        f"<u>{user_instance.name}</u>\n\n"
+        "confirm?",
+        parse_mode="html",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
     return 2.1
 
 
@@ -799,9 +859,9 @@ def commit_name_change(update: Update, context: CallbackContext) -> int:
     user_instance.push_update_user()
 
     query.edit_message_text(
-            text=f"Name sucessfully changed to <u>{user_instance.name}</u>",
-            parse_mode="html"
-            )
+        text=f"Name sucessfully changed to <u>{user_instance.name}</u>",
+        parse_mode="html"
+    )
 
     logging.info("User %s has changed name to %s", user.username, user_instance.name)
 
@@ -826,14 +886,14 @@ def select_gender(update: Update, context: CallbackContext) -> int:
     with open(os.path.join('resources', 'messages', 'registration_introduction.txt')) as f:
         text = f.read()
     buttons = [
-            [InlineKeyboardButton(text='Male 👦🏻', callback_data='Male')],
-            [InlineKeyboardButton(text='Female 👩🏻', callback_data='Female')]
-            ]
+        [InlineKeyboardButton(text='Male 👦🏻', callback_data='Male')],
+        [InlineKeyboardButton(text='Female 👩🏻', callback_data='Female')]
+    ]
     update.message.reply_text(
-            text=text,
-            parse_mode="html",
-            reply_markup=InlineKeyboardMarkup(buttons)
-            )
+        text=text,
+        parse_mode="html",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
     context.user_data['conv_state'] = 0
     return 1
 
@@ -848,8 +908,8 @@ def fill_name(update: Update, context: CallbackContext) -> int:
     bot_message = query.edit_message_text("setting gender...")
 
     bot_message.edit_text(
-            text="Send me your name with your surname!"
-            )
+        text="Send me your name with your surname!"
+    )
     context.user_data['context_state'] = 1
     return 2
 
@@ -862,22 +922,22 @@ def confirm_name_registration(update: Update, context: CallbackContext) -> int:
     existing_user = user_instance.get_exisiting_name(name)
     if existing_user:
         bot_msg.edit_text(
-                f"{name} is currently taken by {existing_user}, please enter another name"
-                )
+            f"{name} is currently taken by {existing_user}, please enter another name"
+        )
         return 2
 
     user_instance.set_name(name)
     context.user_data['user_instance'] = user_instance
 
     buttons = [
-            [InlineKeyboardButton(text="Confirm", callback_data="forward")],
-            [InlineKeyboardButton(text="Edit name", callback_data="back")]
-            ]
+        [InlineKeyboardButton(text="Confirm", callback_data="forward")],
+        [InlineKeyboardButton(text="Edit name", callback_data="back")]
+    ]
     bot_msg.edit_text(
-            text=f"You have sent me: <u>{name}</u>\nConfirm?",
-            parse_mode='html',
-            reply_markup=InlineKeyboardMarkup(buttons)
-            )
+        text=f"You have sent me: <u>{name}</u>\nConfirm?",
+        parse_mode='html',
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
     return 3
 
 
@@ -886,10 +946,10 @@ def commit_registration(update: Update, context: CallbackContext) -> int:
     query.answer()
     user = update.effective_user
     user_instance = context.user_data['user_instance']
-    
+
     bot_message = query.edit_message_text(
-            text=f"registering... {user_instance.name}  "
-            )
+        text=f"registering... {user_instance.name}  "
+    )
     user_instance.push_new_user()
     text = f"""
 You have sucessfully been registered! Please inform the core/exco team to approve your registration😊😊.
@@ -901,11 +961,12 @@ Gender : {user_instance.gender}
 
     """
     bot_message.edit_text(
-            text=text,
-            parse_mode='html'
-            )
+        text=text,
+        parse_mode='html'
+    )
     logger.info('User %s has sucessfully registered', user.first_name)
     return ConversationHandler.END
+
 
 #
 # @send_typing_action
@@ -970,8 +1031,8 @@ Gender : {user_instance.gender}
 def cancel(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     update.message.reply_text(
-            text="process cancelled, see you next time!"
-            )
+        text="process cancelled, see you next time!"
+    )
     logger.info('user %s just cancelled a process', user.first_name)
     return ConversationHandler.END
 
@@ -987,8 +1048,8 @@ def main():
 
     # upgrade if there is
     version = src.Upgrade.upgrade_manager.UpgradeManager(
-            config=CONFIG, cur_ver=2.11
-            )
+        config=CONFIG, cur_ver=2.11
+    )
     updated = version.update_system()
     if updated:
         logger.info("system has been updated. to %.2f", version.cur_ver)
@@ -996,17 +1057,18 @@ def main():
         logger.info("no updates found. continuing...")
 
     commands = [
-            BotCommand("start", "to start the bot"),
-            BotCommand("attendance", "update attendance"),
-            BotCommand("kaypoh", "your friend never go u dw go is it??"),
-            BotCommand("attendance_plus", "one shot update attendance"),
-            BotCommand("events", "events that you are attending"),
-            BotCommand("event_details", "Get event details"),
-            BotCommand("settings", "access settings and refresh username if recently changed"),
-            BotCommand("register", "use this command if you're a new player"),
-            # BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
-            BotCommand("cancel", "cancel any process"),
-            ]
+        BotCommand("new_attendance", "testing command"),
+        BotCommand("start", "to start the bot"),
+        BotCommand("attendance", "update attendance"),
+        BotCommand("kaypoh", "your friend never go u dw go is it??"),
+        BotCommand("attendance_plus", "one shot update attendance"),
+        BotCommand("events", "events that you are attending"),
+        BotCommand("event_details", "Get event details"),
+        BotCommand("settings", "access settings and refresh username if recently changed"),
+        BotCommand("register", "use this command if you're a new player"),
+        # BotCommand("apply_membership", f"use this command if you'll like to be part of {CONFIG['team_name']}!"),
+        BotCommand("cancel", "cancel any process"),
+    ]
 
     Bot(token).set_my_commands(commands)
 
@@ -1015,96 +1077,104 @@ def main():
     # dispatcher to register handlers
     dispatcher = updater.dispatcher
 
+    single_attendance_handler = ConversationHandler(
+        entry_points=[CommandHandler("new_attendance", validate_member)],
+        states={
+            1: [CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     conv_handler_attendance = ConversationHandler(
-            entry_points=[CommandHandler("attendance", choosing_date_low_access)],
-            states={
-                1: [
-                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
-                    CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
-                    ],
-                2: [
-                    CallbackQueryHandler(indicate_attendance, pattern="^(on|off)$"),
-                    CallbackQueryHandler(give_reason, pattern="^\d,1$"),
-                    CallbackQueryHandler(update_attendance, pattern="^\d,0$"),
-                    MessageHandler(Filters.text & ~Filters.command, update_attendance)
-                    ],
-                },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            )
+        entry_points=[CommandHandler("attendance", choosing_date_low_access)],
+        states={
+            1: [
+                CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
+                CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
+            ],
+            2: [
+                CallbackQueryHandler(indicate_attendance, pattern="^(on|off)$"),
+                CallbackQueryHandler(give_reason, pattern="^\d,1$"),
+                CallbackQueryHandler(update_attendance, pattern="^\d,0$"),
+                MessageHandler(Filters.text & ~Filters.command, update_attendance)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
 
     conv_handler_kaypoh = ConversationHandler(
-            entry_points=[CommandHandler("kaypoh", choosing_date_high_access)],
-            states={
-                1: [
-                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
-                    CallbackQueryHandler(attendance_list, pattern='^(\d{10}|\d{12})$')
-                    ],
-                },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            )
+        entry_points=[CommandHandler("kaypoh", choosing_date_high_access)],
+        states={
+            1: [
+                CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
+                CallbackQueryHandler(attendance_list, pattern='^(\d{10}|\d{12})$')
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
 
     conv_handler_mass_attendance = ConversationHandler(
-            entry_points=[CommandHandler("attendance_plus", choosing_more_dates)],
-            states={
-                1: [
-                    CallbackQueryHandler(choosing_more_dates_cont, pattern='^(\d{10}|\d{12})$'),
-                    CallbackQueryHandler(choosing_more_dates_cont, pattern='^back$'),
-                    CallbackQueryHandler(indicate_more, pattern='^forward$')
-                    ],
-                2: [
-                    CallbackQueryHandler(give_reason_more, pattern="^0$"),
-                    CallbackQueryHandler(commit_attendance_plus, pattern="^1$"),
-                    MessageHandler(Filters.text & ~Filters.command, commit_attendance_plus)
-                    ],
-                },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            )
-    
+        entry_points=[CommandHandler("attendance_plus", choosing_more_dates)],
+        states={
+            1: [
+                CallbackQueryHandler(choosing_more_dates_cont, pattern='^(\d{10}|\d{12})$'),
+                CallbackQueryHandler(choosing_more_dates_cont, pattern='^back$'),
+                CallbackQueryHandler(indicate_more, pattern='^forward$')
+            ],
+            2: [
+                CallbackQueryHandler(give_reason_more, pattern="^0$"),
+                CallbackQueryHandler(commit_attendance_plus, pattern="^1$"),
+                MessageHandler(Filters.text & ~Filters.command, commit_attendance_plus)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     conv_handler_save_event = ConversationHandler(
-            entry_points=[CommandHandler("event_details", choosing_date_low_access)],
-            states={
-                1: [
-                    CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
-                    CallbackQueryHandler(generate_ics, pattern='^(\d{10}|\d{12})$')
-                    ],
-                },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            )
+        entry_points=[CommandHandler("event_details", choosing_date_low_access)],
+        states={
+            1: [
+                CallbackQueryHandler(page_change, pattern='^-?[0-9]{0,10}$'),
+                CallbackQueryHandler(generate_ics, pattern='^(\d{10}|\d{12})$')
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
 
     conv_handler_settings = ConversationHandler(
-            entry_points=[CommandHandler("settings",settings_start)],
-            states={
-                1: [
-                    CallbackQueryHandler(name_change, pattern="^name$"),
-                    CallbackQueryHandler(notification_change, pattern="^notification$"),
-                    CallbackQueryHandler(language_change, pattern="^language$")
-                    ],
-                1.1: [MessageHandler(Filters.text & ~Filters.command, confirmation_name_change)],
-                1.2: [CallbackQueryHandler(commit_notification_change, pattern="^\d$")],
-                2.1: [
+        entry_points=[CommandHandler("settings", settings_start)],
+        states={
+            1: [
+                CallbackQueryHandler(name_change, pattern="^name$"),
+                CallbackQueryHandler(notification_change, pattern="^notification$"),
+                CallbackQueryHandler(language_change, pattern="^language$")
+            ],
+            1.1: [MessageHandler(Filters.text & ~Filters.command, confirmation_name_change)],
+            1.2: [CallbackQueryHandler(commit_notification_change, pattern="^\d$")],
+            2.1: [
                 CallbackQueryHandler(commit_name_change, pattern="^forward$"),
                 CallbackQueryHandler(name_change, pattern="^back$")
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-                        )
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
 
     conv_handler_register = ConversationHandler(
-            entry_points=[CommandHandler("register", select_gender)],
-            states={
-                1: [
-                    CallbackQueryHandler(fill_name, pattern='^Male$'),
-                    CallbackQueryHandler(fill_name, pattern='Female')
-                    ],
-                2: [
-                    MessageHandler(Filters.text & ~Filters.command, confirm_name_registration),
-                    ],
-                3: [
-                    CallbackQueryHandler(commit_registration, pattern='^forward$')
-                    ],
-                },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            )
+        entry_points=[CommandHandler("register", select_gender)],
+        states={
+            1: [
+                CallbackQueryHandler(fill_name, pattern='^Male$'),
+                CallbackQueryHandler(fill_name, pattern='Female')
+            ],
+            2: [
+                MessageHandler(Filters.text & ~Filters.command, confirm_name_registration),
+            ],
+            3: [
+                CallbackQueryHandler(commit_registration, pattern='^forward$')
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
     # conv_handler_apply_members = ConversationHandler(
     #         entry_points=[CommandHandler("apply_membership", review_membership)],
     #         states={
@@ -1115,6 +1185,9 @@ def main():
     #         fallbacks=[CommandHandler('cancel', cancel)]
     #         )
     #
+
+    dispatcher.add_handler(single_attendance_handler)
+
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(conv_handler_attendance)
     dispatcher.add_handler(conv_handler_kaypoh)
@@ -1131,10 +1204,10 @@ def main():
     if CONFIG["use_webhook"]:
         logger.info('initiating webhook on %s', webhook_url)
         updater.start_webhook(
-                listen="0.0.0.0",
-                port=5010,
-                url_path=token,
-                )
+            listen="0.0.0.0",
+            port=5010,
+            url_path=token,
+        )
         logger.info('setting webhook...')
         updater.set_webhook(webhook_url + token)
     else:

@@ -19,6 +19,14 @@ class AccessCategory(Enum):
     team_manager = 7
     superuser = 100
 
+    @property
+    def is_at_least_member(self) -> bool:
+        return self.value >= self.member.value
+
+    @property
+    def is_at_least_guest(self):
+        return self.value >= self.guest.value
+
     @staticmethod
     def enum_from_int(value: int) -> "AccessCategory":
         for category in AccessCategory:

@@ -7,8 +7,42 @@ from src.Models.User import User
 from src.Models.Access import Access
 from src.Enum.Enum import AccessCategory
 
+from abc import ABC, abstractmethod
 
-class UserDatabaseService:
+
+class UserServicing(ABC):
+
+    @abstractmethod
+    def insert(self, user: User):
+        pass
+    @abstractmethod
+    def is_exists(self, user_id: int) -> bool:
+        pass
+    @abstractmethod
+    def get_user_by(self, user_id: int) -> User:
+        pass
+
+    @abstractmethod
+    def get_users_by_access(self, access: AccessCategory) -> list[User]:
+        pass
+
+    @abstractmethod
+    def get_user_by_name(self, name: str) -> User:
+        pass
+
+    @abstractmethod
+    def get_user_access(self, user_id: int) -> AccessCategory:
+        pass
+
+    @abstractmethod
+    def update(self, user: User):
+        pass
+
+    @abstractmethod
+    def delete(self, user):
+        pass
+
+class UserService(UserServicing):
     database_session_provider: DatabaseSessionProviding = None
 
     def __init__(self, database_provider: DatabaseSessionProviding = Sqlite3SessionProvider()):
@@ -18,6 +52,13 @@ class UserDatabaseService:
         with self.database_session_provider.make_session() as session:
             session.add(user)
             session.commit()
+
+    def is_exists(self, user_id: int) -> bool:
+        with self.database_session_provider.make_session() as session:
+            statement = exists().where(User.id == user_id)
+            is_exists = session.query(statement).scalar()
+
+        return is_exists
 
     def get_user_by(self, user_id: int) -> User:
 
@@ -51,17 +92,13 @@ class UserDatabaseService:
         session.close()
         return user
 
-    def get_user_access(self, user: User) -> AccessCategory:
+    def get_user_access(self, user_id: int) -> AccessCategory:
 
         with self.database_session_provider.make_session() as session:
-            statement = (
-                select(Access)
-                .join(User, Access.user_id == User.id)
-                .where(Access.user_id == user.id)
-            )
+            statement = select(Access).where(Access.user_id == user_id)
 
             access = session.scalars(statement).one()
-            access_category = AccessCategory.enum_from_int(access)
+            access_category = AccessCategory.enum_from_int(access.control_id)
 
         return access_category
 
@@ -76,7 +113,7 @@ class UserDatabaseService:
 
         return list(users)
 
-    def update_user(self, updated_user: User):
+    def update(self, updated_user: User):
         session = self.database_session_provider.make_session()
         session.begin()
         session.merge(updated_user)

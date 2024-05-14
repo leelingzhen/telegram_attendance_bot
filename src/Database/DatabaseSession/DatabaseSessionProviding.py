@@ -20,10 +20,11 @@ class Sqlite3SessionProvider(DatabaseSessionProviding):
     _test_db_path = os.path.join("resources", "test_attendance.db")
 
     def __init__(self, debug: bool = False, isTest: bool = False) -> object:
-        if isTest:
-            self.engine = create_engine(f"sqlite:///{self._test_db_path}", echo=debug)
-        else:
-            self.engine = create_engine(f"sqlite:///{self._path}", echo=debug)
+        # if isTest:
+        #     self.engine = create_engine(f"sqlite:///{self._test_db_path}", echo=debug)
+        # else:
+        #     self.engine = create_engine(f"sqlite:///{self._path}", echo=debug)
+        self.engine = create_engine(f"sqlite:///{self._test_db_path}", echo=debug)
         self.session_maker = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def make_session(self) -> Session:

@@ -2,13 +2,13 @@ import unittest
 
 from src.Database.DatabaseSession.DatabaseSessionProviding import (DatabaseSessionProviding,
                                                                    Sqlite3SessionProvider)
-from src.Database.Services.UserAttendanceService import UserAttendanceDatabaseService
+from src.Database.Services.UserAttendanceService import UserAttendanceService
 from src.Models.Attendance import Attendance
 
 
 class MyTestCase(unittest.TestCase):
     session_provider: DatabaseSessionProviding = Sqlite3SessionProvider(isTest=True)
-    service = UserAttendanceDatabaseService(database_session_provider=session_provider)
+    service = UserAttendanceService(database_session_provider=session_provider)
 
     def testCRUD(self):
         event_id = 12385
@@ -20,7 +20,7 @@ class MyTestCase(unittest.TestCase):
             status=1,
             reason="test reason"
         )
-        self.service.create(attendance)
+        self.service.insert(attendance)
 
         check_attendances = self.service.read(
             user_id=user_id,
@@ -53,7 +53,7 @@ class MyTestCase(unittest.TestCase):
         all_attendance = [attendance1, attendance2, attendance3, attendance4, attendance5]
 
         for attendance in all_attendance:
-            self.service.create(attendance)
+            self.service.insert(attendance)
 
         attendance_all = self.service.read(event_id=event_id)
         attendance_status_1 = self.service.read(event_id=event_id, status=1)
@@ -75,7 +75,7 @@ class MyTestCase(unittest.TestCase):
             Attendance(event_id=369, user_id=user_id, status=1),
         ]
         for attendance in attendances:
-            self.service.create(attendance)
+            self.service.insert(attendance)
 
         changed_attendance = Attendance(event_id=123, user_id=user_id, status=0)
         added_attendance = Attendance(event_id=498, user_id=user_id, status=1)
