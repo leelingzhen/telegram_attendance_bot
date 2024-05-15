@@ -24,7 +24,7 @@ class AccessCategory(Enum):
         return self.value >= self.member.value
 
     @property
-    def is_at_least_guest(self):
+    def is_at_least_guest(self) -> bool:
         return self.value >= self.guest.value
 
     @staticmethod

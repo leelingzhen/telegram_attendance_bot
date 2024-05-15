@@ -1,3 +1,5 @@
+from datetime import datetime, time
+
 from sqlalchemy import Date, Time
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import mapped_column
@@ -6,7 +8,31 @@ from sqlalchemy.orm import relationship
 
 from src.Database.DatabaseSession.base import Base
 
-class Event(Base):
+class Event:
+    id: int
+    event_type: str
+    event_date: Date
+    start_time: Time
+    end_time: Time
+    location: str
+    announcement: str
+    access_control: int
+    description: str
+    accountable: int
+
+    @property
+    def event_date(self) -> datetime:
+        return datetime.strptime(str(id), "%Y%m%d%H%M")
+
+    @property
+    def format_start(self) -> str:
+        return self.start_time.strftime("%-I:%M%p")
+
+    @property
+    def format_end(self) -> str:
+        return self.end_time.strftime("%-I:%M%p")
+
+class Event(Event, Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(primary_key=True)

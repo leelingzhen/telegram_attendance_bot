@@ -22,7 +22,7 @@ class MyTestCase(unittest.TestCase):
         )
         self.service.insert(attendance)
 
-        check_attendances = self.service.read(
+        check_attendances = self.service.get_attendance(
             user_id=user_id,
             event_id=event_id
         )

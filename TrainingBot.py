@@ -2,6 +2,10 @@ import logging
 import os
 import src.Upgrade.upgrade_manager
 from datetime import datetime, date
+
+from src.Controller.UserAttendanceController import UserAttendanceController
+from src.Models.Attendance import Attendance
+from src.Models.Event import Event
 from src.Models.User import User
 
 from telegram import (
@@ -27,7 +31,7 @@ from telegram.ext import (
 from src.Controller.UserProvider import UserProvider
 from src.Enum.Enum import AccessCategory, Direction
 from src.Controller.EventProvider import EventProvider
-from src.Buttons import EventOptionButton, ScrollButton
+from src.Buttons import ToggleReasonButton
 from src.Decorators import Decorators
 from src.Configuration import Configuration, BotTokens
 from src.View.MessageView import SelectEventOptionsView
@@ -38,6 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CONFIG = Configuration.load_configuration()
 
 # ENTRY POINTS
 @Decorators.send_typing_action
@@ -131,6 +136,7 @@ def date_choosing_handler(
     context.user_data["user"] = user
     context.user_data["access"] = access
     context.user_data["page"] = page
+    context.user_data['is_chosen'] = False
 
     if not events:
         update.message.reply_text("There are no more further planned events. Enjoy your break!🏝🏝")
@@ -146,6 +152,86 @@ def date_choosing_handler(
     return 1
 
 
+def indicate_attendance(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+
+    attendance_controller = UserAttendanceController()
+
+    is_chosen: bool = context.user_data['is_chosen']
+
+    if not is_chosen:
+        # retrieve date query and store
+        event_id = int(query.data)
+        user = context.user_data["user"]
+
+        selected_event = next((event for event in context.user_data["events"] if event.id == event_id), None)
+
+        attendance = Attendance(user_id=user.id, event_id=event_id, reason="", status=-1)
+        if attendance_controller.is_exists(event_id, user_id=user.id):
+            attendance = attendance_controller.fetch_attendance(event_id=event_id, user_id=user.id)
+
+        attach_reason = False
+
+        # store attendance into context
+        context.user_data["event"] = selected_event
+        context.user_data['attendance'] = attendance
+        context.user_data['prev_status'] = attendance.status
+        context.user_data["is_query"] = True
+
+        # date has been chosen so toggle value
+        context.user_data['is_chosen'] = True
+
+    else:
+        attach_reason_query = query.data
+
+        attach_reason = False
+        if attach_reason_query == "on":
+            attach_reason = True
+
+        selected_event = context.user_data['event_instance']
+        attendance = context.user_data['attendance']
+
+        # store
+        context.user_data['attach_reason'] = attach_reason
+
+    event_date = selected_event.event_date
+
+    # always want to create a button state opposite of what attach_reason is
+    reason_button = ToggleReasonButton(not attach_reason)
+
+    is_accountable_reason = selected_event.accountable or attach_reason
+    attach_reason = int(attach_reason)
+    is_accountable_reason = int(is_accountable_reason)
+
+    button = [
+        [reason_button],
+        [InlineKeyboardButton(f"Yes I ❤️{CONFIG.team_name} ", callback_data=f"1,{attach_reason}")],
+        [InlineKeyboardButton("No (lame)", callback_data=f"0,{is_accountable_reason}")],
+    ]
+    reply_markup = InlineKeyboardMarkup(button)
+
+    query.edit_message_text(
+        text=f"""
+Your attendance is indicated as \'{attendance.format_attendance}\'
+
+<u>Details</u>
+Date: {event_date.strftime('%-d %b, %a')}
+Event: {selected_event.event_type}
+Time: {selected_event.format_start} - {selected_event.format_end}
+Location : {selected_event.location}
+Accountable event: {'Yes' if selected_event.accountable else 'No'}
+
+<u>Description</u>
+{selected_event.description}
+{chr(10) + '<i>You will write your reason/comment in the next step</i>' + chr(10) if attach_reason else ''}
+Would you like to go for {selected_event.event_type}?
+            """,
+        reply_markup=reply_markup,
+        parse_mode='html'
+    )
+    return 2
+
 @Decorators.send_typing_action
 def cancel(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
@@ -159,9 +245,8 @@ def cancel(update: Update, context: CallbackContext) -> int:
 def main():
 
     bot_tokens = BotTokens.load()
-    config = Configuration.load_configuration()
 
-    if config.development:
+    if CONFIG.development:
         token = bot_tokens.dev_bot
     else:
         token = bot_tokens.training_bot

@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from sqlalchemy import select, Exists
 from sqlalchemy.orm import Query
 from sqlalchemy.sql import exists
@@ -6,7 +8,29 @@ from src.Database.DatabaseSession.DatabaseSessionProviding import (DatabaseSessi
 from src.Models.Attendance import Attendance
 
 
-class UserAttendanceService:
+class UserAttendanceServicing(ABC):
+    @abstractmethod
+    def insert(self, attendance: Attendance):
+        pass
+
+    @abstractmethod
+    def get_attendance(self, event_id: int = None, user_id: int = None, status: int = None) -> list[Attendance]:
+        pass
+
+    @abstractmethod
+    def get_attendance_after(self, event_id: int, user_id: int) -> list[Attendance]:
+        pass
+
+    @abstractmethod
+    def is_record_exists(self, user_id: int, event_id: int) -> bool:
+        pass
+
+    @abstractmethod
+    def update(self, attendances: [Attendance]):
+        pass
+
+
+class UserAttendanceService(UserAttendanceServicing):
     database_session_provider: DatabaseSessionProviding
 
     def __init__(self, database_session_provider: DatabaseSessionProviding = Sqlite3SessionProvider()):

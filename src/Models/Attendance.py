@@ -20,6 +20,16 @@ class Attendance:
         self.status = status
         self.reason = reason
 
+    @property
+    def format_attendance(self) -> str:
+
+        if self.status == -1:
+            return "Not Indicated"
+        elif self.status == 1:
+            return f"Yes {self.reason}"
+        else:
+            return f"No {self.reason}"
+
 
 class Attendance(Attendance, Base):
     __tablename__ = "new_attendance"

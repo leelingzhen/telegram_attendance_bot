@@ -25,4 +25,12 @@ class ScrollButton(InlineKeyboardButton):
             super().__init__(text="Prev", callback_data="-1", **_kwargs)
 
 
+class ToggleReasonButton(InlineKeyboardButton):
+
+    def __init__(self, attach_reason: bool, **kwargs):
+        if attach_reason:
+            super().__init__(text="Give Reason/Comment", callback_data="on")
+        else:
+            super().__init__(text="Remove Reason/Comment", callback_data="off")
+
 
