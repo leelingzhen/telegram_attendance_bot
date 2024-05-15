@@ -2,13 +2,11 @@ import logging
 import os
 import json
 import sqlite3
-from typing import Union
 
 import src.utils as utils
 import src.Upgrade.upgrade_manager
 
 from datetime import datetime, date
-from functools import wraps
 
 from src.Models.User import User
 from src.user_manager import UserManager
@@ -37,9 +35,9 @@ from telegram.ext import (
 ### new imports
 from src.Controller.UserProvider import UserProvider
 from src.Enum.Enum import AccessCategory, Direction
-from src.Controller.UserValidation import UserValidation
 from src.Controller.EventProvider import EventProvider
 from src.Buttons import EventOptionButton, ScrollButton
+from src.Decorators import Decorators
 
 with open("config.json") as f:
     CONFIG = json.load(f)
@@ -52,59 +50,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# typing wrapper
-def send_typing_action(func):
-    """Sends typing action while processing func command."""
-
-    @wraps(func)
-    def command_func(update, context, *args, **kwargs):
-        context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
-        return func(update, context, *args, **kwargs)
-
-    return command_func
-
-
-def secure(access=2):
-    def decorator(func):
-        # admin restrictions
-        @wraps(func)
-        def wrapped(update, context, *args, **kwargs):
-            user = update.effective_user
-            user_instance = UserManager(user)
-            context.user_data['user_instance'] = user_instance
-            if user_instance.access < access:
-                print("WARNING: Unauthorized access denied for @{}.".format(user.username))
-                update.message.reply_text(
-                    text='you do not have access to this function, please contact adminstrators'
-                )
-                return  # quit function
-            return func(update, context, *args, **kwargs)
-
-        return wrapped
-
-    return decorator
-
-
-def check_and_cache_user(func):
-    """Sends typing action while processing func command."""
-
-    @wraps(func)
-    def wrapped(update, context, *args, **kwargs):
-        telegram_user_object = update.effective_user
-        validation = UserValidation()
-        if not validation.user_exists(user_id=telegram_user_object.id):
-            user = validation.make_new_user(
-                id=telegram_user_object.id,
-                telegram_user=telegram_user_object.username)
-            validation.cache_user(user, AccessCategory.public)
-        return func(update, context, *args, **kwargs)
-
-    return wrapped
-
-
 # ENTRY POINTS
-@send_typing_action
-@check_and_cache_user
+@Decorators.send_typing_action
+@Decorators.check_and_cache_user
 def start(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     user_provider = UserProvider()
@@ -122,8 +70,8 @@ def start(update: Update, context: CallbackContext) -> None:
     return None
 
 
-@send_typing_action
-@check_and_cache_user
+@Decorators.send_typing_action
+@Decorators.check_and_cache_user
 def validate_at_least_guest(update: Update, context: CallbackContext) -> int:
     user_id = update.effective_user.id
 
@@ -140,8 +88,8 @@ def validate_at_least_guest(update: Update, context: CallbackContext) -> int:
     return conversation_state
 
 
-@send_typing_action
-@check_and_cache_user
+@Decorators.send_typing_action
+@Decorators.check_and_cache_user
 def validate_member(update: Update, context: CallbackContext) -> int:
     user_id = update.effective_user.id
 
@@ -156,6 +104,7 @@ def validate_member(update: Update, context: CallbackContext) -> int:
     conversation_state = date_choosing_handler(update, context, user, access)
 
     return conversation_state
+
 
 def page_change_v2(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
@@ -229,10 +178,15 @@ def date_choosing_handler(
     return 1
 
 
-
-@secure(access=2)
-@send_typing_action
+@Decorators.secure(access=2)
+@Decorators.send_typing_action
 def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
+    """
+    DEPRECATED
+    @param update:
+    @param context:
+    @return:
+    """
     user = update.effective_user
     user_instance = UserManager(user)
     user_instance.update_telegram_user()
@@ -259,8 +213,8 @@ def choosing_date_low_access(update: Update, context: CallbackContext) -> int:
     return 1
 
 
-@secure(access=4)
-@send_typing_action
+@Decorators.secure(access=4)
+@Decorators.send_typing_action
 def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_instance = UserManager(user)
@@ -287,6 +241,12 @@ def choosing_date_high_access(update: Update, context: CallbackContext) -> int:
 
 
 def page_change(update: Update, context: CallbackContext) -> int:
+    """
+    DEPRECATED
+    @param update:
+    @param context:
+    @return:
+    """
     query = update.callback_query
     query.answer()
     scroll_val = int(query.data)
@@ -506,8 +466,8 @@ def update_kaypoh_messages(context: CallbackContext):
     )
 
 
-@secure(access=4)
-@send_typing_action
+@Decorators.secure(access=4)
+@Decorators.send_typing_action
 def choosing_more_dates(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_instance = UserManager(user)
@@ -696,8 +656,8 @@ Attendance : {"Yes" if status == 1 else "No"}
     return ConversationHandler.END
 
 
-@secure(access=2)
-@send_typing_action
+@Decorators.secure(access=2)
+@Decorators.send_typing_action
 def events(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     user_instance = UserManager(user)
@@ -722,7 +682,7 @@ def events(update: Update, context: CallbackContext) -> None:
     return None
 
 
-@send_typing_action
+@Decorators.send_typing_action
 def generate_ics(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
@@ -773,8 +733,8 @@ Location : {event_data['location']}
     return ConversationHandler.END
 
 
-@secure(access=4)
-@send_typing_action
+@Decorators.secure(access=4)
+@Decorators.send_typing_action
 def settings_start(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     logger.info("User %s is accessing settings...", user.first_name)
@@ -892,7 +852,7 @@ You have sucessfully turned {'off' if notification == 0 else 'on'} notifications
     return ConversationHandler.END
 
 
-@send_typing_action
+@Decorators.send_typing_action
 def confirmation_name_change(update: Update, context: CallbackContext) -> float:
     buttons = [
         [InlineKeyboardButton(text="Confirm", callback_data="forward")],
@@ -940,7 +900,7 @@ def commit_name_change(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 
-@send_typing_action
+@Decorators.send_typing_action
 def select_gender(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     user_instance = UserManager(user)
@@ -1041,8 +1001,8 @@ Gender : {user_instance.gender}
 
 
 #
-# @send_typing_action
-# @secure(access=2)
+# @Decorators.send_typing_action
+# @Decorators.secure(access=2)
 # def review_membership(update: Update, context: CallbackContext) -> int:
 #     user = update.effective_user
 #     logger.info("user %s just initiated /apply_membership", user.first_name)
@@ -1099,7 +1059,7 @@ Gender : {user_instance.gender}
 #         return ConversationHandler.END
 #
 
-@send_typing_action
+@Decorators.send_typing_action
 def cancel(update: Update, context: CallbackContext) -> int:
     user = update.effective_user
     update.message.reply_text(
