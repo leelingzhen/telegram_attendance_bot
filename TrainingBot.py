@@ -34,7 +34,7 @@ from src.Controller.EventProvider import EventProvider
 from src.Buttons import ToggleReasonButton
 from src.Decorators import Decorators
 from src.Configuration import Configuration, BotTokens
-from src.View.MessageView import SelectEventOptionsView
+from src.View.MessageView import SelectEventOptionsView, AcknowledgeAttendanceView, AttendanceStatusView
 
 # enable logging
 logging.basicConfig(
@@ -165,7 +165,7 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
         event_id = int(query.data)
         user = context.user_data["user"]
 
-        selected_event = next((event for event in context.user_data["events"] if event.id == event_id), None)
+        selected_event: Event = next((event for event in context.user_data["events"] if event.id == event_id), None)
 
         attendance = Attendance(user_id=user.id, event_id=event_id, reason="", status=-1)
         if attendance_controller.is_exists(event_id, user_id=user.id):
@@ -184,53 +184,86 @@ def indicate_attendance(update: Update, context: CallbackContext) -> int:
 
     else:
         attach_reason_query = query.data
+        attach_reason = True if attach_reason_query == "on" else False
 
-        attach_reason = False
-        if attach_reason_query == "on":
-            attach_reason = True
-
-        selected_event = context.user_data['event_instance']
+        selected_event = context.user_data['event']
         attendance = context.user_data['attendance']
 
         # store
         context.user_data['attach_reason'] = attach_reason
 
-    event_date = selected_event.event_date
+    message_view = AttendanceStatusView(
+        event=selected_event,
+        attendance=attendance,
+        attach_reason=attach_reason,
+        team_name=CONFIG.team_name
+    )
 
-    # always want to create a button state opposite of what attach_reason is
-    reason_button = ToggleReasonButton(not attach_reason)
-
-    is_accountable_reason = selected_event.accountable or attach_reason
-    attach_reason = int(attach_reason)
-    is_accountable_reason = int(is_accountable_reason)
-
-    button = [
-        [reason_button],
-        [InlineKeyboardButton(f"Yes I ❤️{CONFIG.team_name} ", callback_data=f"1,{attach_reason}")],
-        [InlineKeyboardButton("No (lame)", callback_data=f"0,{is_accountable_reason}")],
-    ]
-    reply_markup = InlineKeyboardMarkup(button)
+    reply_markup = InlineKeyboardMarkup(message_view.buttons)
 
     query.edit_message_text(
-        text=f"""
-Your attendance is indicated as \'{attendance.format_attendance}\'
-
-<u>Details</u>
-Date: {event_date.strftime('%-d %b, %a')}
-Event: {selected_event.event_type}
-Time: {selected_event.format_start} - {selected_event.format_end}
-Location : {selected_event.location}
-Accountable event: {'Yes' if selected_event.accountable else 'No'}
-
-<u>Description</u>
-{selected_event.description}
-{chr(10) + '<i>You will write your reason/comment in the next step</i>' + chr(10) if attach_reason else ''}
-Would you like to go for {selected_event.event_type}?
-            """,
+        text=message_view.message_text,
         reply_markup=reply_markup,
         parse_mode='html'
     )
     return 2
+
+
+def give_reason(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    status = query.data[0]
+    status = int(status)
+
+    attendance = context.user_data["attendance"]
+    attendance.status = status
+
+    context.user_data['attendance'] = attendance
+    context.user_data["is_query"] = False
+
+    query.edit_message_text(
+        text="Please write a comment/reason 😏"
+    )
+    return 2
+
+
+def update_attendance(update: Update, context: CallbackContext) -> int:
+    # retrieve indication of attendance
+    attendance: Attendance = context.user_data['attendance']
+    is_query: bool = context.user_data['is_query']
+    event: Event = context.user_data['event']
+
+    text = "updating your attendance..."
+    if is_query:
+        # previous state is query
+        query = update.callback_query
+        query.answer()
+        status = int(query.data[0])
+        attendance.status = status
+        attendance.clean_and_set_reason("")
+        bot_message = query.edit_message_text(
+            text=text
+        )
+    else:
+        # previous state is message_text
+        reason = update.message.text
+        attendance.clean_and_set_reason(reason)
+        bot_message = update.message.reply_text(
+            text=text
+        )
+
+    # TODO add a job queue to update attendance
+    UserAttendanceController().update_attendance(attendance)
+
+    # TODO add a job queue to update all kaypoh messages
+    message_view = AcknowledgeAttendanceView(event=event, attendance=attendance)
+    bot_message.edit_text(text=message_view.message_text, parse_mode='html')
+
+    # TODO resend announcement to user here if previously indicated as absent
+
+    logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
+    return ConversationHandler.END
+
 
 @Decorators.send_typing_action
 def cancel(update: Update, context: CallbackContext) -> int:
@@ -252,7 +285,6 @@ def main():
         token = bot_tokens.training_bot
 
     commands = [
-        BotCommand("new_attendance", "testing command"),
         BotCommand("start", "to start the bot"),
         BotCommand("attendance", "update attendance"),
         BotCommand("kaypoh", "your friend never go u dw go is it??"),
@@ -273,11 +305,17 @@ def main():
     dispatcher = updater.dispatcher
 
     single_attendance_handler = ConversationHandler(
-        entry_points=[CommandHandler("new_attendance", validate_member)],
+        entry_points=[CommandHandler("attendance", validate_member)],
         states={
             1: [
                 CallbackQueryHandler(page_change_v2, pattern='^-?[0-9]{0,10}$'),
                 CallbackQueryHandler(indicate_attendance, pattern='^(\d{10}|\d{12})$')
+            ],
+            2: [
+                CallbackQueryHandler(indicate_attendance, pattern="^(on|off)$"),
+                CallbackQueryHandler(give_reason, pattern="^\d,1$"),
+                CallbackQueryHandler(update_attendance, pattern="^\d,0$"),
+                MessageHandler(Filters.text & ~Filters.command, update_attendance),
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],

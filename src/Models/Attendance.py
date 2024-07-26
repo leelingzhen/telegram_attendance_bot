@@ -25,10 +25,32 @@ class Attendance:
 
         if self.status == -1:
             return "Not Indicated"
-        elif self.status == 1:
-            return f"Yes {self.reason}"
-        else:
-            return f"No {self.reason}"
+
+        formatted_text = "Yes" if self.status else "No"
+        if self.reason:
+            formatted_text += f" {self.reason}"
+
+        return formatted_text
+
+
+class Attendance(Attendance):
+    def clean_and_set_reason(self, reason: str):
+        clean_reason = self.remove_html_tags(text=reason)
+        self.reason = clean_reason
+        return
+
+    @staticmethod
+    def remove_html_tags(text: str) -> str:
+        html_tags = {
+            "&": "&amp",
+            '"': "&quote",
+            "'": "&#39",
+            "<": "&lt",
+            ">": "&gt",
+        }
+        for tag in html_tags:
+            text = text.replace(tag, html_tags[tag])
+        return text
 
 
 class Attendance(Attendance, Base):
@@ -44,3 +66,5 @@ class Attendance(Attendance, Base):
                 user_id={self.user_id!r},\
                 status={self.status!r},\
                 reason={self.reason!r}")
+
+
