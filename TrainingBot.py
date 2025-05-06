@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG = Configuration.load_configuration()
 
+
 # ENTRY POINTS
 @Decorators.send_typing_action
 @Decorators.check_and_cache_user
@@ -100,6 +101,7 @@ def validate_member(update: Update, context: CallbackContext) -> int:
     return conversation_state
 
 
+# CALLBACKS
 def page_change_v2(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
@@ -118,6 +120,17 @@ def page_change_v2(update: Update, context: CallbackContext) -> int:
     )
 
     return 1
+
+
+def get_attendances_for_event(update: Update, context: CallbackContext) -> int:
+    user = update.effective_user
+    logger.info('user %s is a kaypoh', user.first_name)
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(text="Kaypohing...")
+
+    event_id = int(query.data)
+
 
 
 def date_choosing_handler(
@@ -319,6 +332,16 @@ def main():
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    kaypoh_handler = ConversationHandler (
+        entry_points=[CommandHandler(command="kaypoh", callback=validate_member)],
+        states={
+            1: [
+                CallbackQueryHandler(page_change_v2, pattern="^-?[0-9]{0,10}$"),
+
+            ]
+        }
     )
 
     dispatcher.add_handler(CommandHandler("start", start))

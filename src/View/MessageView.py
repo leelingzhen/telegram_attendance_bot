@@ -139,3 +139,26 @@ Attendance: {'Yes' if attendance.status else 'No'}
 
     def message_text(self) -> str:
         return self.message_text
+
+class KaypohMessageView(Viewing):
+    message_text: str
+
+    def __init__(self, event: Event):
+        self.message_text = f"""Attendance
+        for <b> {event.event_type} </b> on <u> {event.event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')} </u>: {total_attendees}
+
+        Attending 👦🏻: {n_male}
+        {males}
+
+        Attending 👩🏻: {n_female}
+        {females}
+
+        Absent: {n_absentees}
+        {absentees}
+
+        Uninidicated: {n_unindicated}
+        {unindicated}
+
+        <i> last
+        updated
+        {date_time_rendered} </i>"""
