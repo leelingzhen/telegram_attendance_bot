@@ -54,7 +54,7 @@ class Attendance(Attendance):
 
 
 class Attendance(Attendance, Base):
-    __tablename__ = "new_attendance"
+    __tablename__ = "attendance"
 
     event_id: Mapped[int] = mapped_column(ForeignKey(Event.id), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey(User.id), primary_key=True)

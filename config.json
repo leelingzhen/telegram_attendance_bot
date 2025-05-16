@@ -1,6 +1,6 @@
 {
     "development": 1,
-    "database": "resources/test_attendance.db",
+    "database": "resources/attendance.db",
     "team_name": "Alliance",
     "training_bot_name": "@alliance_training_bot",
     "use_webhook": 0,

@@ -24,7 +24,7 @@ class Sqlite3SessionProvider(DatabaseSessionProviding):
         #     self.engine = create_engine(f"sqlite:///{self._test_db_path}", echo=debug)
         # else:
         #     self.engine = create_engine(f"sqlite:///{self._path}", echo=debug)
-        self.engine = create_engine(f"sqlite:///{self._test_db_path}", echo=debug)
+        self.engine = create_engine(f"sqlite:///{self._path}", echo=debug)
         self.session_maker = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def make_session(self) -> Session:

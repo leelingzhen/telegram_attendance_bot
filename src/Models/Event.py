@@ -63,7 +63,7 @@ class Event(Event, Base):
                 accountable={self.accountable!r}")
 
 class AnnouncementEntity(Base):
-    __tablename__ = "new_announcement_entities"
+    __tablename__ = "announcement_entities"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey(Event.id))

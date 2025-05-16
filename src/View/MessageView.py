@@ -1,3 +1,4 @@
+import datetime
 from typing import Union
 
 from telegram import InlineKeyboardButton
@@ -6,6 +7,8 @@ from src.Buttons import EventOptionButton, ScrollButton, ToggleReasonButton
 from src.Enum.Enum import Direction
 from src.Models.Event import Event
 from src.Models.Attendance import Attendance
+from src.Models.User import User
+from src.Models.Access import Access
 
 from abc import ABC, abstractmethod
 
@@ -143,22 +146,35 @@ Attendance: {'Yes' if attendance.status else 'No'}
 class KaypohMessageView(Viewing):
     message_text: str
 
-    def __init__(self, event: Event):
+    def __init__(self, event: Event,
+                 attending_male_users: list[tuple[User, Access, Attendance]],
+                 attending_female_users: list[tuple[User, Access, Attendance]],
+                absent_users: list[tuple[User, Access, Attendance]],
+                unindicated_users: list[tuple[User, Access]],
+                 ):
+        # TODO: reformat the message to something that looks better
+
+        ## TODO when updating the message, update date time rendered
+        date_time_rendered = datetime.datetime.now().strftime("%-d-%b %-I:%M%p")
+
+        total_attendees = len(attending_male_users) + len(attending_female_users)
+
         self.message_text = f"""Attendance
         for <b> {event.event_type} </b> on <u> {event.event_date.strftime('%-d-%b-%y, %a @ %-I:%M%p')} </u>: {total_attendees}
 
-        Attending 👦🏻: {n_male}
-        {males}
+        Attending 👦🏻: {len(attending_male_users)}
+        { chr(10).join(str(item[0].name) for item in attending_male_users)}
 
-        Attending 👩🏻: {n_female}
-        {females}
+        Attending 👩🏻: {len(attending_female_users)}
+        { chr(10).join(str(item[0].name) for item in attending_female_users) }
 
-        Absent: {n_absentees}
-        {absentees}
+        Absent: {len(absent_users)}
+        { chr(10).join(str(item[0].name) for item in absent_users) }
 
-        Uninidicated: {n_unindicated}
-        {unindicated}
+        Uninidicated: {len(unindicated_users)}
+        { chr(10).join(str(item[0].name) for item in unindicated_users) }
 
-        <i> last
-        updated
-        {date_time_rendered} </i>"""
+        <i> last updated {date_time_rendered} </i>"""
+
+    def message_text(self) -> str:
+        return self.message_text

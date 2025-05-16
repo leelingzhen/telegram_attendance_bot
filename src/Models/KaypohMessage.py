@@ -8,7 +8,7 @@ from src.Models.User import User
 from src.Models.Event import Event
 
 class KaypohMessage(Base):
-    __tablename__ = "new_kaypoh_message"
+    __tablename__ = "kaypoh_message"
 
     user_id: Mapped[int] = mapped_column(ForeignKey(User.id), primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey(Event.id), primary_key=True)

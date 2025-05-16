@@ -15,7 +15,7 @@ class Access:
 
 
 class Access(Access, Base):
-    __tablename__ = "new_access_control"
+    __tablename__ = "access_control"
 
     user_id: Mapped[int] = mapped_column(ForeignKey(User.id), primary_key=True)
     control_id: Mapped[int] = mapped_column(ForeignKey(AccessDescription.id))

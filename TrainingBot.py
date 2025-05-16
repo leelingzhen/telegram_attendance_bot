@@ -4,6 +4,7 @@ import src.Upgrade.upgrade_manager
 from datetime import datetime, date
 
 from src.Controller.UserAttendanceController import UserAttendanceController
+from src.Database.Services.EventAttendanceService import EventAttendanceService
 from src.Models.Attendance import Attendance
 from src.Models.Event import Event
 from src.Models.User import User
@@ -29,12 +30,17 @@ from telegram.ext import (
 
 ### new imports
 from src.Controller.UserProvider import UserProvider
-from src.Enum.Enum import AccessCategory, Direction
+from src.Enum.Enum import AccessCategory, Direction, Gender
 from src.Controller.EventProvider import EventProvider
 from src.Buttons import ToggleReasonButton
 from src.Decorators import Decorators
 from src.Configuration import Configuration, BotTokens
-from src.View.MessageView import SelectEventOptionsView, AcknowledgeAttendanceView, AttendanceStatusView
+from src.View.MessageView import (
+    SelectEventOptionsView,
+    AcknowledgeAttendanceView,
+    AttendanceStatusView,
+    KaypohMessageView
+)
 
 # enable logging
 logging.basicConfig(
@@ -277,6 +283,50 @@ def update_attendance(update: Update, context: CallbackContext) -> int:
     logger.info("User %s has filled up his/her attendance...", update.effective_user.first_name)
     return ConversationHandler.END
 
+def getting_kaypoh_message(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    user = context.user_data["user"]
+    event_id = int(query.data)
+    service = EventAttendanceService()
+
+    selected_event: Event = next((event for event in context.user_data["events"] if event.id == event_id), None)
+    attending_male_users = service.get_attendances(
+        event_id=event_id,
+        is_attending=True,
+        gender=Gender.male,
+        access_category=AccessCategory.guest
+    )
+
+    attending_female_users = service.get_attendances(
+        event_id=event_id,
+        is_attending=True,
+        gender=Gender.female,
+        access_category=AccessCategory.guest
+    )
+
+    not_attending = service.get_attendances(
+        event_id=event_id,
+        is_attending=False,
+        gender=Gender.both,
+        access_category=AccessCategory.guest
+    )
+
+    not_indicated = service.get_not_indicated_attendances(event_id=event_id)
+
+    message_view = KaypohMessageView(
+        event=selected_event,
+        attending_male_users=attending_male_users,
+        attending_female_users=attending_female_users,
+        absent_users=not_attending,
+        unindicated_users=not_indicated,
+    )
+
+    query.edit_message_text(text=message_view.message_text)
+    logger.info("User %s has kaypoh-ed attendance...", user.first_name)
+
+    return ConversationHandler.END
+
 
 @Decorators.send_typing_action
 def cancel(update: Update, context: CallbackContext) -> int:
@@ -284,7 +334,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
     update.message.reply_text(
         text="process cancelled, see you next time!"
     )
-    logger.info('user %s just cancelled a process', user.first_name)
+    logger.info('user %s just cancelled a process', user.name)
     return ConversationHandler.END
 
 
@@ -339,7 +389,8 @@ def main():
         states={
             1: [
                 CallbackQueryHandler(page_change_v2, pattern="^-?[0-9]{0,10}$"),
-            ]
+                CallbackQueryHandler(getting_kaypoh_message, pattern='^(\d{10}|\d{12})$'),
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )

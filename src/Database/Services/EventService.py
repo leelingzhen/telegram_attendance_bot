@@ -43,7 +43,7 @@ class EventService:
             statement = (
                 select(Event)
                 .filter(Event.id >= event_id)
-                .filter(Event.access_control >= access.value)
+                .filter(Event.access_control < access.value)
             )
             events = session.scalars(statement).all()
         return list(events)
