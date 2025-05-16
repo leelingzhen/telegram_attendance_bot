@@ -339,13 +339,14 @@ def main():
         states={
             1: [
                 CallbackQueryHandler(page_change_v2, pattern="^-?[0-9]{0,10}$"),
-
             ]
-        }
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
     )
 
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(single_attendance_handler)
+    dispatcher.add_handler(kaypoh_handler)
     dispatcher.add_handler(CommandHandler("cancel", cancel))
 
     updater.start_polling()
